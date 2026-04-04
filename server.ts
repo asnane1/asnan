@@ -1,256 +1,130 @@
 import "dotenv/config";
 import express from "express";
-import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-async function startServer() {
-  const app = express();
-  const PORT = 3000;
+const app = express();
+app.use(express.json());
 
-  app.use(express.json());
+// Helper to get WC credentials
+const getWCCreds = () => {
+  const consumerKey = process.env.WC_CONSUMER_KEY?.trim();
+  const consumerSecret = process.env.WC_CONSUMER_SECRET?.trim();
+  const storeUrl = process.env.WC_STORE_URL?.trim();
+  if (!consumerKey || !consumerSecret || !storeUrl) return null;
+  return { consumerKey, consumerSecret, storeUrl };
+};
 
-  // Helper to get WC credentials
-  const getWCCreds = () => {
-    const consumerKey = process.env.WC_CONSUMER_KEY?.trim();
-    const consumerSecret = process.env.WC_CONSUMER_SECRET?.trim();
-    const storeUrl = process.env.WC_STORE_URL?.trim();
-    if (!consumerKey || !consumerSecret || !storeUrl) return null;
-    return { consumerKey, consumerSecret, storeUrl };
+// Helper for WC requests
+const wcRequest = async (method: string, endpoint: string, body?: any, queryParams: any = {}) => {
+  const creds = getWCCreds();
+  if (!creds) throw new Error("WooCommerce credentials not configured");
+
+  const baseUrl = creds.storeUrl.replace(/\/$/, "");
+  
+  const params = new URLSearchParams({
+    consumer_key: creds.consumerKey,
+    consumer_secret: creds.consumerSecret,
+    ...queryParams
+  });
+
+  const apiUrl = `${baseUrl}/wp-json/wc/v3/${endpoint}?${params.toString()}`;
+  const fallbackUrl = `${baseUrl}/index.php?rest_route=/wc/v3/${endpoint}&${params.toString()}`;
+
+  const options: RequestInit = {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+      "User-Agent": "Asnanee-Store-App/1.0"
+    }
   };
+  if (body) options.body = JSON.stringify(body);
 
-  // Helper for WC requests
-  const wcRequest = async (method: string, endpoint: string, body?: any, queryParams: any = {}) => {
-    const creds = getWCCreds();
-    if (!creds) throw new Error("WooCommerce credentials not configured");
+  let response = await fetch(apiUrl, options);
+  if (!response.ok && response.status === 404) {
+    response = await fetch(fallbackUrl, options);
+  }
+  return response;
+};
 
-    const baseUrl = creds.storeUrl.replace(/\/$/, "");
-    
-    // Use query parameters for authentication as it's more reliable on some hosts
-    const params = new URLSearchParams({
-      consumer_key: creds.consumerKey,
-      consumer_secret: creds.consumerSecret,
-      ...queryParams
-    });
-
-    const apiUrl = `${baseUrl}/wp-json/wc/v3/${endpoint}?${params.toString()}`;
-    const fallbackUrl = `${baseUrl}/index.php?rest_route=/wc/v3/${endpoint}&${params.toString()}`;
-
-    const options: RequestInit = {
-      method,
-      headers: {
-        "Content-Type": "application/json",
-        "User-Agent": "Asnanee-Store-App/1.0"
-      }
-    };
-    if (body) options.body = JSON.stringify(body);
-
-    let response = await fetch(apiUrl, options);
-    if (!response.ok && response.status === 404) {
-      console.log(`404 on ${apiUrl}, trying fallback...`);
-      response = await fetch(fallbackUrl, options);
-    }
-    return response;
-  };
-
-  // API Routes
-  app.get("/api/test-connection", async (req, res) => {
-    const creds = getWCCreds();
-    if (!creds) {
-      return res.json({ 
-        status: "error", 
-        message: "Credentials missing in environment variables",
-        env_keys_found: Object.keys(process.env).filter(k => k.startsWith('WC_'))
-      });
-    }
-    try {
-      const response = await wcRequest("GET", "products", null, { per_page: '1' });
-      if (response.ok) {
-        return res.json({ status: "success", message: "Connected to WooCommerce successfully" });
-      } else {
-        const error = await response.text();
-        return res.json({ status: "error", message: "WooCommerce API returned an error", details: error });
-      }
-    } catch (error: any) {
-      return res.json({ status: "error", message: error.message });
-    }
-  });
-
-  app.get("/api/products", async (req, res) => {
-    try {
-      const response = await wcRequest("GET", "products", null, { per_page: '100', ...req.query });
-      if (!response.ok) {
-        const errorText = await response.text();
-        return res.status(response.status).json({ error: "WC API Error", details: errorText });
-      }
-      const data = await response.json();
-      res.json(data);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  app.post("/api/products", async (req, res) => {
-    try {
-      const response = await wcRequest("POST", "products", req.body);
-      if (!response.ok) {
-        const errorText = await response.text();
-        return res.status(response.status).json({ error: "WC API Error", details: errorText });
-      }
-      const data = await response.json();
-      res.json(data);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  app.put("/api/products/:id", async (req, res) => {
-    try {
-      const response = await wcRequest("PUT", `products/${req.params.id}`, req.body);
-      if (!response.ok) {
-        const errorText = await response.text();
-        return res.status(response.status).json({ error: "WC API Error", details: errorText });
-      }
-      const data = await response.json();
-      res.json(data);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  app.delete("/api/products/:id", async (req, res) => {
-    try {
-      const response = await wcRequest("DELETE", `products/${req.params.id}`, null, { force: true });
-      if (!response.ok) {
-        const errorText = await response.text();
-        return res.status(response.status).json({ error: "WC API Error", details: errorText });
-      }
-      const data = await response.json();
-      res.json(data);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  app.get("/api/categories", async (req, res) => {
-    try {
-      const response = await wcRequest("GET", "products/categories", null, { per_page: '100' });
-      if (!response.ok) {
-        const errorText = await response.text();
-        return res.status(response.status).json({ error: "WC API Error", details: errorText });
-      }
-      const data = await response.json();
-      res.json(data);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  app.post("/api/categories", async (req, res) => {
-    try {
-      const response = await wcRequest("POST", "products/categories", req.body);
-      if (!response.ok) {
-        const errorText = await response.text();
-        return res.status(response.status).json({ error: "WC API Error", details: errorText });
-      }
-      const data = await response.json();
-      res.json(data);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  app.put("/api/categories/:id", async (req, res) => {
-    try {
-      const response = await wcRequest("PUT", `products/categories/${req.params.id}`, req.body);
-      if (!response.ok) {
-        const errorText = await response.text();
-        return res.status(response.status).json({ error: "WC API Error", details: errorText });
-      }
-      const data = await response.json();
-      res.json(data);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  app.delete("/api/categories/:id", async (req, res) => {
-    try {
-      const response = await wcRequest("DELETE", `products/categories/${req.params.id}`, null, { force: true });
-      if (!response.ok) {
-        const errorText = await response.text();
-        return res.status(response.status).json({ error: "WC API Error", details: errorText });
-      }
-      const data = await response.json();
-      res.json(data);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  app.get("/api/orders", async (req, res) => {
-    try {
-      const response = await wcRequest("GET", "orders", null, { per_page: '50' });
-      if (!response.ok) {
-        const errorText = await response.text();
-        return res.status(response.status).json({ error: "WC API Error", details: errorText });
-      }
-      const data = await response.json();
-      res.json(data);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  app.put("/api/orders/:id", async (req, res) => {
-    try {
-      const response = await wcRequest("PUT", `orders/${req.params.id}`, req.body);
-      if (!response.ok) {
-        const errorText = await response.text();
-        return res.status(response.status).json({ error: "WC API Error", details: errorText });
-      }
-      const data = await response.json();
-      res.json(data);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Vite middleware for development
-  if (process.env.NODE_ENV !== "production" && !process.env.VERCEL) {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
+// API Routes
+app.get("/api/test-connection", async (req, res) => {
+  const creds = getWCCreds();
+  if (!creds) {
+    return res.json({ 
+      status: "error", 
+      message: "Credentials missing",
+      keys: Object.keys(process.env).filter(k => k.startsWith('WC_'))
     });
   }
-
-  if (!process.env.VERCEL) {
-    app.listen(PORT, "0.0.0.0", () => {
-      console.log(`Server running on http://localhost:${PORT}`);
-    });
+  try {
+    const response = await wcRequest("GET", "products", null, { per_page: '1' });
+    if (response.ok) {
+      res.json({ status: "success", message: "Connected!" });
+    } else {
+      const err = await response.text();
+      res.json({ status: "error", details: err });
+    }
+  } catch (error: any) {
+    res.json({ status: "error", message: error.message });
   }
+});
 
-  return app;
+app.get("/api/products", async (req, res) => {
+  try {
+    const response = await wcRequest("GET", "products", null, { per_page: '100', ...req.query });
+    const data = await response.json();
+    res.json(data);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get("/api/categories", async (req, res) => {
+  try {
+    const response = await wcRequest("GET", "products/categories", null, { per_page: '100' });
+    const data = await response.json();
+    res.json(data);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get("/api/orders", async (req, res) => {
+  try {
+    const response = await wcRequest("GET", "orders", null, { per_page: '50' });
+    const data = await response.json();
+    res.json(data);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Vite middleware for development
+if (process.env.NODE_ENV !== "production" && !process.env.VERCEL) {
+  const { createServer } = await import("vite");
+  const vite = await createServer({
+    server: { middlewareMode: true },
+    appType: "spa",
+  });
+  app.use(vite.middlewares);
+} else {
+  const distPath = path.join(process.cwd(), 'dist');
+  app.use(express.static(distPath));
+  app.get('*', (req, res) => {
+    if (req.path.startsWith('/api')) return res.status(404).end();
+    res.sendFile(path.join(distPath, 'index.html'));
+  });
 }
 
+const PORT = 3000;
 if (!process.env.VERCEL) {
-  startServer();
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
 }
 
-let cachedApp: any;
-export default async (req: any, res: any) => {
-  if (!cachedApp) {
-    cachedApp = await startServer();
-  }
-  return cachedApp(req, res);
-}
+export default app;
