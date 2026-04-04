@@ -2,6 +2,7 @@ import "dotenv/config";
 import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
+import multer from "multer";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -9,7 +10,10 @@ const __dirname = path.dirname(__filename);
 const app = express();
 app.use(express.json());
 
-// Helper to get WC credentials
+// Configure multer for memory storage
+const upload = multer({ storage: multer.memoryStorage() });
+
+// Helper to get WP/WC credentials
 const getWCCreds = () => {
   const consumerKey = process.env.WC_CONSUMER_KEY?.trim();
   const consumerSecret = process.env.WC_CONSUMER_SECRET?.trim();
@@ -17,6 +21,10 @@ const getWCCreds = () => {
   if (!consumerKey || !consumerSecret || !storeUrl) return null;
   return { consumerKey, consumerSecret, storeUrl };
 };
+
+// WordPress Media Upload Credentials
+const WP_USER = process.env.WP_USER || "mohammad";
+const WP_PASS = process.env.WP_PASS || "rQLU W4Yd FQ7h ZRSi Vzrx diuh";
 
 // Helper for WC requests
 const wcRequest = async (method: string, endpoint: string, body?: any, queryParams: any = {}) => {
@@ -51,6 +59,51 @@ const wcRequest = async (method: string, endpoint: string, body?: any, queryPara
 };
 
 // API Routes
+app.post("/api/upload", upload.single("file"), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+
+  const creds = getWCCreds();
+  if (!creds) return res.status(500).json({ error: "Store URL not configured" });
+
+  const baseUrl = creds.storeUrl.replace(/\/$/, "");
+  const uploadUrl = `${baseUrl}/wp-json/wp/v2/media`;
+  const auth = Buffer.from(`${WP_USER}:${WP_PASS}`).toString("base64");
+
+  try {
+    const options = {
+      method: "POST",
+      headers: {
+        "Authorization": `Basic ${auth}`,
+        "Content-Disposition": `attachment; filename="${req.file.originalname}"`,
+        "Content-Type": req.file.mimetype,
+      },
+      body: req.file.buffer,
+    };
+
+    let response = await fetch(uploadUrl, options);
+    
+    // Fallback for non-pretty permalinks
+    if (!response.ok && response.status === 404) {
+      const fallbackUploadUrl = `${baseUrl}/index.php?rest_route=/wp/v2/media`;
+      response = await fetch(fallbackUploadUrl, options);
+    }
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ message: "Unknown error" }));
+      console.error("WP Upload Error:", errorData);
+      return res.status(response.status).json({ 
+        error: "WordPress Upload Error", 
+        details: errorData.message || "فشل الرفع إلى ووردبريس",
+        code: errorData.code
+      });
+    }
+
+    const data = await response.json();
+    res.json({ url: data.source_url, id: data.id });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
 app.get("/api/test-connection", async (req, res) => {
   const creds = getWCCreds();
   if (!creds) {

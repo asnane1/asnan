@@ -358,27 +358,27 @@ export default function App() {
               />
             </div>
 
-            <div className="flex flex-col sm:flex-row gap-4 mt-auto">
-              <button 
-                onClick={() => {
-                  addToCart(product);
-                  onClose();
-                }}
-                className="flex-grow py-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-all shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2"
-              >
-                <ShoppingCart size={20} />
-                إضافة إلى السلة
-              </button>
-              <a 
-                href={`https://wa.me/966500000000?text=${encodeURIComponent(`السلام عليكم، أرغب في الاستفسار عن منتج: ${product.name}`)}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-6 py-4 bg-green-500 hover:bg-green-600 text-white font-bold rounded-xl transition-all flex items-center justify-center gap-2"
-              >
-                <Phone size={20} />
-                واتساب
-              </a>
-            </div>
+              <div className="flex flex-col sm:flex-row gap-4 mt-auto">
+                <button 
+                  onClick={() => {
+                    addToCart(product);
+                    onClose();
+                  }}
+                  className="flex-grow py-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-all shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2"
+                >
+                  <ShoppingCart size={20} />
+                  إضافة إلى السلة
+                </button>
+                <a 
+                  href={`https://wa.me/966575034090?text=${encodeURIComponent(`السلام عليكم، أرغب في الاستفسار عن منتج: ${product.name}`)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-6 py-4 bg-green-500 hover:bg-green-600 text-white font-bold rounded-xl transition-all flex items-center justify-center gap-2"
+                >
+                  <Phone size={20} />
+                  واتساب
+                </a>
+              </div>
           </div>
         </motion.div>
       </motion.div>
@@ -459,7 +459,6 @@ export default function App() {
               <a href="#" className="text-slate-600 hover:text-blue-600 font-medium transition-colors">الرئيسية</a>
               <a href="#products" className="text-slate-600 hover:text-blue-600 font-medium transition-colors">المنتجات</a>
               <a href="#about" className="text-slate-600 hover:text-blue-600 font-medium transition-colors">من نحن</a>
-              <a href="#contact" className="text-slate-600 hover:text-blue-600 font-medium transition-colors">اتصل بنا</a>
             </div>
 
             <div className="flex items-center gap-4">
@@ -557,7 +556,6 @@ export default function App() {
                 <a href="#" className="block px-3 py-2 text-slate-600 font-medium">الرئيسية</a>
                 <a href="#products" className="block px-3 py-2 text-slate-600 font-medium">المنتجات</a>
                 <a href="#about" className="block px-3 py-2 text-slate-600 font-medium">من نحن</a>
-                <a href="#contact" className="block px-3 py-2 text-slate-600 font-medium">اتصل بنا</a>
                 
                 {isUserAdmin && (
                   <button 
@@ -1009,72 +1007,6 @@ export default function App() {
                 </div>
               </div>
             </section>
-
-            {/* Contact Section */}
-            <section id="contact" className="py-20 bg-slate-900 text-white">
-              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                <div className="grid lg:grid-cols-2 gap-16 items-center">
-                  <div>
-                    <h2 className="text-3xl font-bold mb-6">تواصلوا معنا اليوم</h2>
-                    <p className="text-slate-400 mb-10 text-lg">
-                      نحن هنا لدعمكم في توفير كل ما يتعلق بالعناية بالأسنان والعلاج داخل عيادتكم. لا تترددوا في طلب أي استشارة أو منتج.
-                    </p>
-                    
-                    <div className="space-y-6">
-                      <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 bg-white/10 rounded-xl flex items-center justify-center text-blue-400">
-                          <Phone size={24} />
-                        </div>
-                        <div>
-                          <p className="text-sm text-slate-500">اتصل بنا</p>
-                          <p className="text-lg font-bold">+966 50 000 0000</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 bg-white/10 rounded-xl flex items-center justify-center text-blue-400">
-                          <Mail size={24} />
-                        </div>
-                        <div>
-                          <p className="text-sm text-slate-500">البريد الإلكتروني</p>
-                          <p className="text-lg font-bold">info@asnanee.com</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 bg-white/10 rounded-xl flex items-center justify-center text-blue-400">
-                          <MapPin size={24} />
-                        </div>
-                        <div>
-                          <p className="text-sm text-slate-500">الموقع</p>
-                          <p className="text-lg font-bold">الرياض، المملكة العربية السعودية</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="bg-white rounded-3xl p-8 text-slate-900 shadow-2xl">
-                    <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
-                      <div className="grid sm:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <label className="text-sm font-bold text-slate-700">الاسم</label>
-                          <input type="text" className="w-full px-4 py-3 bg-slate-100 border-none rounded-xl focus:ring-2 focus:ring-blue-500 transition-all" placeholder="اسمك الكامل" />
-                        </div>
-                        <div className="space-y-2">
-                          <label className="text-sm font-bold text-slate-700">رقم الهاتف</label>
-                          <input type="tel" className="w-full px-4 py-3 bg-slate-100 border-none rounded-xl focus:ring-2 focus:ring-blue-500 transition-all" placeholder="05xxxxxxxx" />
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-sm font-bold text-slate-700">الرسالة</label>
-                        <textarea rows={4} className="w-full px-4 py-3 bg-slate-100 border-none rounded-xl focus:ring-2 focus:ring-blue-500 transition-all" placeholder="كيف يمكننا مساعدتك؟"></textarea>
-                      </div>
-                      <button className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-all shadow-lg shadow-blue-600/20">
-                        إرسال الطلب
-                      </button>
-                    </form>
-                  </div>
-                </div>
-              </div>
-            </section>
           </>
         ) : currentView === 'cart' ? (
           <Cart 
@@ -1136,6 +1068,18 @@ export default function App() {
           />
         )}
       </AnimatePresence>
+      {/* Floating WhatsApp Button */}
+      <a 
+        href="https://wa.me/966575034090" 
+        target="_blank" 
+        rel="noopener noreferrer"
+        className="fixed bottom-6 right-6 z-50 w-16 h-16 bg-green-500 text-white rounded-full flex items-center justify-center shadow-2xl hover:bg-green-600 hover:scale-110 transition-all group"
+      >
+        <Phone size={32} />
+        <span className="absolute right-full mr-4 px-4 py-2 bg-white text-slate-900 text-sm font-bold rounded-xl shadow-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+          تواصل معنا عبر واتساب
+        </span>
+      </a>
     </div>
   );
 }

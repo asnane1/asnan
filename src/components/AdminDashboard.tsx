@@ -103,6 +103,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
 
   const [editingItem, setEditingItem] = useState<any>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     if (activeTab === 'banners') {
@@ -116,6 +117,42 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
       fetchData();
     }
   }, [activeTab]);
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'banner' | 'product' | 'category', index?: number) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    setError(null);
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.details || data.error || 'فشل تحميل الصورة');
+
+      if (type === 'banner') {
+        setEditingItem({ ...editingItem, imageUrl: data.url });
+      } else if (type === 'product' && index !== undefined) {
+        const newImages = [...editingItem.images];
+        newImages[index] = { src: data.url };
+        setEditingItem({ ...editingItem, images: newImages });
+      } else if (type === 'category') {
+        setEditingItem({ ...editingItem, image: { src: data.url } });
+      }
+      setSuccess('تم تحميل الصورة بنجاح');
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const fetchData = async () => {
     setLoading(true);
@@ -652,15 +689,37 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                 {activeTab === 'banners' && (
                   <>
                     <div className="space-y-2">
-                      <label className="text-sm font-bold text-slate-700">رابط الصورة (URL)</label>
-                      <input 
-                        type="url" 
-                        required
-                        value={editingItem?.imageUrl || ''}
-                        onChange={(e) => setEditingItem({ ...editingItem, imageUrl: e.target.value })}
-                        className="w-full px-4 py-3 bg-slate-100 border-none rounded-xl focus:ring-2 focus:ring-blue-500 transition-all"
-                        placeholder="https://example.com/banner.jpg"
-                      />
+                      <label className="text-sm font-bold text-slate-700">صورة البنر</label>
+                      <div className="flex gap-4 items-start">
+                        <div className="flex-grow space-y-2">
+                          <input 
+                            type="url" 
+                            required
+                            value={editingItem?.imageUrl || ''}
+                            onChange={(e) => setEditingItem({ ...editingItem, imageUrl: e.target.value })}
+                            className="w-full px-4 py-3 bg-slate-100 border-none rounded-xl focus:ring-2 focus:ring-blue-500 transition-all"
+                            placeholder="رابط الصورة (URL)"
+                          />
+                          <div className="flex items-center gap-2">
+                            <label className="cursor-pointer px-4 py-2 bg-blue-50 text-blue-600 rounded-lg text-xs font-bold hover:bg-blue-100 transition-all flex items-center gap-2">
+                              <Plus size={14} />
+                              {uploading ? 'جاري التحميل...' : 'رفع صورة من الجهاز'}
+                              <input 
+                                type="file" 
+                                className="hidden" 
+                                accept="image/*"
+                                onChange={(e) => handleImageUpload(e, 'banner')}
+                                disabled={uploading}
+                              />
+                            </label>
+                          </div>
+                        </div>
+                        {editingItem?.imageUrl && (
+                          <div className="w-32 h-20 rounded-xl overflow-hidden border border-slate-200 bg-slate-50">
+                            <img src={editingItem.imageUrl} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                          </div>
+                        )}
+                      </div>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
@@ -841,32 +900,52 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                           <Plus size={14} /> إضافة صورة
                         </button>
                       </div>
-                      <div className="space-y-2">
+                      <div className="space-y-4">
                         {editingItem?.images?.map((img: any, index: number) => (
-                          <div key={index} className="flex gap-2">
-                            <input 
-                              type="url" 
-                              placeholder="رابط الصورة (URL)"
-                              value={img.src}
-                              onChange={(e) => {
-                                const newImages = [...editingItem.images];
-                                newImages[index] = { src: e.target.value };
-                                setEditingItem({ ...editingItem, images: newImages });
-                              }}
-                              className="flex-grow px-4 py-2 bg-slate-100 border-none rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
-                            />
-                            {editingItem.images.length > 1 && (
-                              <button 
-                                type="button"
-                                onClick={() => {
-                                  const newImages = editingItem.images.filter((_: any, i: number) => i !== index);
+                          <div key={index} className="space-y-2 p-4 bg-slate-50 rounded-xl border border-slate-100">
+                            <div className="flex gap-2">
+                              <input 
+                                type="url" 
+                                placeholder="رابط الصورة (URL)"
+                                value={img.src}
+                                onChange={(e) => {
+                                  const newImages = [...editingItem.images];
+                                  newImages[index] = { src: e.target.value };
                                   setEditingItem({ ...editingItem, images: newImages });
                                 }}
-                                className="p-2 text-red-500 hover:bg-red-50 rounded-lg"
-                              >
-                                <Trash2 size={18} />
-                              </button>
-                            )}
+                                className="flex-grow px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                              />
+                              {editingItem.images.length > 1 && (
+                                <button 
+                                  type="button"
+                                  onClick={() => {
+                                    const newImages = editingItem.images.filter((_: any, i: number) => i !== index);
+                                    setEditingItem({ ...editingItem, images: newImages });
+                                  }}
+                                  className="p-2 text-red-500 hover:bg-red-50 rounded-lg"
+                                >
+                                  <Trash2 size={18} />
+                                </button>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-4">
+                              <label className="cursor-pointer px-3 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg text-[10px] font-bold hover:bg-slate-50 transition-all flex items-center gap-1">
+                                <Plus size={12} />
+                                {uploading ? 'جاري التحميل...' : 'رفع صورة'}
+                                <input 
+                                  type="file" 
+                                  className="hidden" 
+                                  accept="image/*"
+                                  onChange={(e) => handleImageUpload(e, 'product', index)}
+                                  disabled={uploading}
+                                />
+                              </label>
+                              {img.src && (
+                                <div className="w-12 h-12 rounded-lg overflow-hidden border border-slate-200">
+                                  <img src={img.src} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                                </div>
+                              )}
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -890,14 +969,36 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                       </select>
                     </div>
                     <div className="space-y-2">
-                      <label className="text-sm font-bold text-slate-700">رابط صورة التصنيف</label>
-                      <input 
-                        type="url" 
-                        value={editingItem?.image?.src || ''}
-                        onChange={(e) => setEditingItem({ ...editingItem, image: { src: e.target.value } })}
-                        className="w-full px-4 py-3 bg-slate-100 border-none rounded-xl focus:ring-2 focus:ring-blue-500 transition-all"
-                        placeholder="https://example.com/image.jpg"
-                      />
+                      <label className="text-sm font-bold text-slate-700">صورة التصنيف</label>
+                      <div className="flex gap-4 items-start">
+                        <div className="flex-grow space-y-2">
+                          <input 
+                            type="url" 
+                            value={editingItem?.image?.src || ''}
+                            onChange={(e) => setEditingItem({ ...editingItem, image: { src: e.target.value } })}
+                            className="w-full px-4 py-3 bg-slate-100 border-none rounded-xl focus:ring-2 focus:ring-blue-500 transition-all"
+                            placeholder="رابط الصورة (URL)"
+                          />
+                          <div className="flex items-center gap-2">
+                            <label className="cursor-pointer px-4 py-2 bg-blue-50 text-blue-600 rounded-lg text-xs font-bold hover:bg-blue-100 transition-all flex items-center gap-2">
+                              <Plus size={14} />
+                              {uploading ? 'جاري التحميل...' : 'رفع صورة من الجهاز'}
+                              <input 
+                                type="file" 
+                                className="hidden" 
+                                accept="image/*"
+                                onChange={(e) => handleImageUpload(e, 'category')}
+                                disabled={uploading}
+                              />
+                            </label>
+                          </div>
+                        </div>
+                        {editingItem?.image?.src && (
+                          <div className="w-20 h-20 rounded-xl overflow-hidden border border-slate-200 bg-slate-50">
+                            <img src={editingItem.image.src} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </>
                 )}
