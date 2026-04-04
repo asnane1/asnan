@@ -28,8 +28,8 @@ async function startServer() {
     if (!creds) throw new Error("WooCommerce credentials not configured");
 
     const baseUrl = creds.storeUrl.replace(/\/$/, "");
-    const auth = Buffer.from(`${creds.consumerKey}:${creds.consumerSecret}`).toString("base64");
     
+    // Use query parameters for authentication as it's more reliable on some hosts
     const params = new URLSearchParams({
       consumer_key: creds.consumerKey,
       consumer_secret: creds.consumerSecret,
@@ -43,7 +43,6 @@ async function startServer() {
       method,
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Basic ${auth}`,
         "User-Agent": "Asnanee-Store-App/1.0"
       }
     };
@@ -58,6 +57,28 @@ async function startServer() {
   };
 
   // API Routes
+  app.get("/api/test-connection", async (req, res) => {
+    const creds = getWCCreds();
+    if (!creds) {
+      return res.json({ 
+        status: "error", 
+        message: "Credentials missing in environment variables",
+        env_keys_found: Object.keys(process.env).filter(k => k.startsWith('WC_'))
+      });
+    }
+    try {
+      const response = await wcRequest("GET", "products", null, { per_page: '1' });
+      if (response.ok) {
+        return res.json({ status: "success", message: "Connected to WooCommerce successfully" });
+      } else {
+        const error = await response.text();
+        return res.json({ status: "error", message: "WooCommerce API returned an error", details: error });
+      }
+    } catch (error: any) {
+      return res.json({ status: "error", message: error.message });
+    }
+  });
+
   app.get("/api/products", async (req, res) => {
     try {
       const response = await wcRequest("GET", "products", null, { per_page: '100', ...req.query });
