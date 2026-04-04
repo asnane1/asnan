@@ -1,0 +1,42 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "Stores user roles and basic information.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "email": { "type": "string", "format": "email", "description": "User email" },
+        "role": { "type": "string", "enum": ["admin", "client"], "description": "User role" },
+        "displayName": { "type": "string", "description": "User display name" }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "Banner": {
+      "title": "Homepage Banner",
+      "description": "Stores banner images and metadata for the homepage.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Banner ID" },
+        "imageUrl": { "type": "string", "format": "uri", "description": "URL of the banner image" },
+        "title": { "type": "string", "description": "Optional title for the banner" },
+        "subtitle": { "type": "string", "description": "Optional subtitle for the banner" },
+        "link": { "type": "string", "format": "uri", "description": "Optional link for the banner" },
+        "order": { "type": "integer", "description": "Display order" },
+        "active": { "type": "boolean", "description": "Whether the banner is active" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp" }
+      },
+      "required": ["imageUrl", "active", "order"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile documents."
+    },
+    "/banners/{bannerId}": {
+      "schema": "Banner",
+      "description": "Homepage banner documents."
+    }
+  }
+}
