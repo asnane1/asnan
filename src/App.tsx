@@ -45,20 +45,13 @@ interface Banner {
 }
 
 const ToothIcon = ({ size = 24, className = "" }: { size?: number, className?: string }) => (
-  <svg 
-    width={size} 
-    height={size} 
-    viewBox="0 0 24 24" 
-    fill="none" 
-    stroke="currentColor" 
-    strokeWidth="2" 
-    strokeLinecap="round" 
-    strokeLinejoin="round" 
-    className={className}
-  >
-    <path d="M12 2C10 2 8 3 7 5c-1 2-1 4 0 6 0 1 1 2 2 3 1 1 1 2 1 3v2c0 1 1 2 2 2s2-1 2-2v-2c0-1 0-2 1-3 1-1 2-2 2-3 1-2 1-4 0-6-1-2-3-3-5-3Z" />
-    <path d="M9 17c0 2 1 3 3 3s3-1 3-3" />
-  </svg>
+  <img 
+    src="https://store.asnanee.com/wp-content/uploads/2026/04/icon.png" 
+    alt="Icon" 
+    style={{ width: size, height: size }}
+    className={`rounded-lg object-contain ${className}`}
+    referrerPolicy="no-referrer"
+  />
 );
 
 const IconMap: Record<string, any> = {
@@ -96,6 +89,11 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(true);
   const [banners, setBanners] = useState<Banner[]>([]);
   const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
+  const [latestProducts, setLatestProducts] = useState<Product[]>([]);
+  const [bestSellers, setBestSellers] = useState<Product[]>([]);
+  const [recentlyViewed, setRecentlyViewed] = useState<Product[]>([]);
+  const [latestLoading, setLatestLoading] = useState(false);
+  const [bestLoading, setBestLoading] = useState(false);
 
   useEffect(() => {
     const q = query(
@@ -234,6 +232,9 @@ export default function App() {
           description: item.description,
           image: item.images[0]?.src,
           price: item.price,
+          regularPrice: item.regular_price,
+          salePrice: item.sale_price,
+          onSale: item.on_sale,
           permalink: item.permalink
         }));
         
@@ -248,6 +249,82 @@ export default function App() {
 
     fetchProducts();
   }, [selectedParentId, selectedChildId]);
+
+  useEffect(() => {
+    async function fetchSpecialProducts() {
+      try {
+        setLatestLoading(true);
+        const latestRes = await fetch('/api/products?orderby=date&order=desc&per_page=8');
+        if (latestRes.ok) {
+          const latestData = await latestRes.json();
+          setLatestProducts(latestData.map((item: any) => ({
+            id: item.id.toString(),
+            name: item.name,
+            nameEn: item.slug,
+            category: item.categories[0]?.id.toString() || 'other',
+            description: item.description,
+            image: item.images[0]?.src,
+            price: item.price,
+            regularPrice: item.regular_price,
+            salePrice: item.sale_price,
+            onSale: item.on_sale,
+            permalink: item.permalink
+          })));
+        }
+      } catch (err) {
+        console.error("Error fetching latest products:", err);
+      } finally {
+        setLatestLoading(false);
+      }
+
+      try {
+        setBestLoading(true);
+        const bestRes = await fetch('/api/products?orderby=popularity&order=desc&per_page=8');
+        if (bestRes.ok) {
+          const bestData = await bestRes.json();
+          setBestSellers(bestData.map((item: any) => ({
+            id: item.id.toString(),
+            name: item.name,
+            nameEn: item.slug,
+            category: item.categories[0]?.id.toString() || 'other',
+            description: item.description,
+            image: item.images[0]?.src,
+            price: item.price,
+            regularPrice: item.regular_price,
+            salePrice: item.sale_price,
+            onSale: item.on_sale,
+            permalink: item.permalink
+          })));
+        }
+      } catch (err) {
+        console.error("Error fetching best sellers:", err);
+      } finally {
+        setBestLoading(false);
+      }
+    }
+
+    fetchSpecialProducts();
+  }, []);
+
+  useEffect(() => {
+    const saved = localStorage.getItem('recentlyViewed');
+    if (saved) {
+      try {
+        setRecentlyViewed(JSON.parse(saved));
+      } catch (e) {
+        console.error("Error parsing recently viewed:", e);
+      }
+    }
+  }, []);
+
+  const addToRecentlyViewed = (product: Product) => {
+    setRecentlyViewed(prev => {
+      const filtered = prev.filter(p => p.id !== product.id);
+      const updated = [product, ...filtered].slice(0, 8);
+      localStorage.setItem('recentlyViewed', JSON.stringify(updated));
+      return updated;
+    });
+  };
 
   const parentCategories = useMemo(() => {
     return categories.filter(cat => cat.parent === 0);
@@ -287,6 +364,96 @@ export default function App() {
     } else {
       setSelectedChildId(id);
     }
+  };
+
+  const ProductCard = ({ product }: { product: Product, key?: string }) => {
+    const discountPercentage = useMemo(() => {
+      if (product.onSale && product.regularPrice && product.salePrice) {
+        const regular = parseFloat(product.regularPrice);
+        const sale = parseFloat(product.salePrice);
+        if (regular > 0) {
+          return Math.round(((regular - sale) / regular) * 100);
+        }
+      }
+      return 0;
+    }, [product]);
+
+    return (
+      <motion.div
+        layout
+        initial={{ opacity: 0, y: 20 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true }}
+        className="bg-white rounded-2xl overflow-hidden transition-all border-2 border-[#00b5ad]/20 hover:border-[#00b5ad] group flex flex-col cursor-pointer relative p-4"
+        onClick={() => {
+          setSelectedProduct(product);
+          addToRecentlyViewed(product);
+        }}
+      >
+        <div className="relative aspect-square mb-4">
+          {product.image ? (
+            <img 
+              src={product.image} 
+              alt={product.name} 
+              className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500"
+              referrerPolicy="no-referrer"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-slate-200">
+              <ToothIcon size={80} />
+            </div>
+          )}
+          
+          {/* Favorite Button - Centered at bottom of image */}
+          <button 
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleFavorite(product);
+            }}
+            className={`absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 z-10 w-10 h-10 rounded-full flex items-center justify-center transition-all shadow-md ${
+              favorites.some(p => p.id === product.id) 
+                ? 'bg-[#00b5ad] text-white' 
+                : 'bg-white text-[#00b5ad] hover:bg-[#00b5ad] hover:text-white'
+            }`}
+          >
+            <Heart size={20} fill={favorites.some(p => p.id === product.id) ? "currentColor" : "none"} />
+          </button>
+        </div>
+        
+        <div className="flex flex-col flex-grow text-center mt-4">
+          <h3 className="text-sm font-bold text-slate-900 mb-2 line-clamp-2 min-h-[40px]">{product.name}</h3>
+          
+          <div className="flex flex-col items-center gap-1 mb-4">
+            {product.onSale && discountPercentage > 0 ? (
+              <>
+                <div className="flex items-center gap-2">
+                  <span className="text-red-500 font-bold text-lg">{product.salePrice} ر.س</span>
+                  <span className="text-slate-400 line-through text-sm">{product.regularPrice} ر.س</span>
+                  <span className="bg-green-100 text-green-600 px-2 py-0.5 rounded text-[10px] font-bold">
+                    وفر {discountPercentage}%
+                  </span>
+                </div>
+                <span className="text-red-500 text-xs font-bold">خصم {discountPercentage}%</span>
+              </>
+            ) : (
+              <span className="text-[#00b5ad] font-bold text-lg">
+                {product.price ? `${product.price} ر.س` : 'اتصل للسعر'}
+              </span>
+            )}
+          </div>
+          
+          <button 
+            className="w-full py-2 border-2 border-[#00b5ad] text-[#00b5ad] font-bold rounded-lg hover:bg-[#00b5ad] hover:text-white transition-all text-sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              addToCart(product);
+            }}
+          >
+            إضافة للسلة
+          </button>
+        </div>
+      </motion.div>
+    );
   };
 
   const ProductModal = ({ product, onClose }: { product: Product, onClose: () => void }) => {
@@ -447,18 +614,18 @@ export default function App() {
                 onClick={() => setCurrentView('home')}
                 className="flex items-center gap-2 hover:opacity-80 transition-opacity"
               >
-                <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center text-white shadow-lg shadow-blue-600/20">
-                  <ToothIcon size={24} />
+                <div className="w-10 h-10 bg-[#00b5ad]/10 rounded-lg flex items-center justify-center text-[#00b5ad] shadow-sm">
+                  <ToothIcon size={32} />
                 </div>
-                <span className="text-xl font-bold text-blue-900 hidden sm:block">متجر أسناننا</span>
+                <span className="text-xl font-bold text-slate-900 hidden sm:block">متجر أسناننا</span>
               </button>
             </div>
 
             {/* Desktop Menu */}
             <div className="hidden md:flex items-center gap-8">
-              <a href="#" className="text-slate-600 hover:text-blue-600 font-medium transition-colors">الرئيسية</a>
-              <a href="#products" className="text-slate-600 hover:text-blue-600 font-medium transition-colors">المنتجات</a>
-              <a href="#about" className="text-slate-600 hover:text-blue-600 font-medium transition-colors">من نحن</a>
+              <a href="#" className="text-slate-600 hover:text-[#00b5ad] font-medium transition-colors">الرئيسية</a>
+              <a href="#products" className="text-slate-600 hover:text-[#00b5ad] font-medium transition-colors">المنتجات</a>
+              <a href="#about" className="text-slate-600 hover:text-[#00b5ad] font-medium transition-colors">من نحن</a>
             </div>
 
             <div className="flex items-center gap-4">
@@ -467,7 +634,7 @@ export default function App() {
                 <input 
                   type="text" 
                   placeholder="بحث عن منتج..." 
-                  className="pr-10 pl-4 py-2 bg-slate-100 border-none rounded-full text-sm focus:ring-2 focus:ring-blue-500 transition-all w-48 lg:w-64"
+                  className="pr-10 pl-4 py-2 bg-slate-100 border-none rounded-full text-sm focus:ring-2 focus:ring-[#00b5ad] transition-all w-48 lg:w-64"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
@@ -487,11 +654,11 @@ export default function App() {
                 </button>
                 <button 
                   onClick={() => setCurrentView('cart')}
-                  className={`p-2 transition-colors relative ${currentView === 'cart' ? 'text-blue-600' : 'text-slate-600 hover:text-blue-600'}`}
+                  className={`p-2 transition-colors relative ${currentView === 'cart' ? 'text-[#00b5ad]' : 'text-slate-600 hover:text-[#00b5ad]'}`}
                 >
                   <ShoppingCart size={22} />
                   {cart.length > 0 && (
-                    <span className="absolute -top-1 -right-1 w-5 h-5 bg-blue-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-white">
+                    <span className="absolute -top-1 -right-1 w-5 h-5 bg-[#00b5ad] text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-white">
                       {cart.reduce((acc, item) => acc + item.quantity, 0)}
                     </span>
                   )}
@@ -868,7 +1035,7 @@ export default function App() {
 
                 {loading ? (
                   <div className="flex flex-col items-center justify-center py-20">
-                    <Loader2 className="w-12 h-12 text-blue-600 animate-spin mb-4" />
+                    <Loader2 className="w-12 h-12 text-[#00b5ad] animate-spin mb-4" />
                     <p className="text-slate-600 font-medium">جاري تحميل المنتجات من المتجر...</p>
                   </div>
                 ) : error ? (
@@ -891,77 +1058,7 @@ export default function App() {
                   >
                     <AnimatePresence mode="popLayout">
                       {filteredProducts.map((product) => (
-                        <motion.div
-                          key={product.id}
-                          layout
-                          initial={{ opacity: 0, y: 20 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, scale: 0.9 }}
-                          transition={{ duration: 0.3 }}
-                          className="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow border border-slate-100 group flex flex-col cursor-pointer relative"
-                        >
-                          <button 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              toggleFavorite(product);
-                            }}
-                            className={`absolute top-3 left-3 z-10 p-2 rounded-xl transition-all ${
-                              favorites.some(p => p.id === product.id) 
-                                ? 'bg-red-50 text-red-500' 
-                                : 'bg-white/80 backdrop-blur-md text-slate-400 hover:text-red-500'
-                            }`}
-                          >
-                            <Heart size={18} fill={favorites.some(p => p.id === product.id) ? "currentColor" : "none"} />
-                          </button>
-
-                          <div 
-                            className="aspect-square bg-slate-100 relative overflow-hidden"
-                            onClick={() => setSelectedProduct(product)}
-                          >
-                            {product.image ? (
-                              <img 
-                                src={product.image} 
-                                alt={product.name} 
-                                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                                referrerPolicy="no-referrer"
-                              />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center text-slate-300">
-                                <ToothIcon size={64} />
-                              </div>
-                            )}
-                            <div className="absolute top-3 right-3">
-                              <span className="bg-white/90 backdrop-blur-sm text-blue-600 px-3 py-1 rounded-full text-xs font-bold shadow-sm">
-                                {(product as any).price ? `${(product as any).price} ر.س` : 'اتصل للسعر'}
-                              </span>
-                            </div>
-                          </div>
-                          
-                          <div className="p-6 flex flex-col flex-grow text-right">
-                            <h3 className="text-lg font-bold text-slate-900 mb-1 line-clamp-2">{product.name}</h3>
-                            <p className="text-xs text-blue-500 font-bold mb-4 uppercase tracking-wider">
-                              {getCategoryName(product.category)}
-                            </p>
-                            
-                            <div className="mt-auto pt-4 flex items-center justify-between border-t border-slate-50">
-                              <button 
-                                onClick={() => setSelectedProduct(product)}
-                                className="text-blue-600 hover:text-blue-700 font-bold text-sm flex items-center gap-1"
-                              >
-                                تفاصيل المنتج <ChevronLeft size={14} />
-                              </button>
-                              <button 
-                                className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-600 hover:text-white transition-colors"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  addToCart(product);
-                                }}
-                              >
-                                <ShoppingCart size={18} />
-                              </button>
-                            </div>
-                          </div>
-                        </motion.div>
+                        <ProductCard key={product.id} product={product} />
                       ))}
                     </AnimatePresence>
                   </motion.div>
@@ -978,6 +1075,98 @@ export default function App() {
                 )}
               </div>
             </section>
+
+            {/* Latest Products Section */}
+            <section className="py-16 bg-white">
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div className="flex items-center justify-between mb-10">
+                  <div className="text-right">
+                    <h2 className="text-3xl font-bold text-slate-900 mb-2">أحدث المنتجات</h2>
+                    <div className="h-1 w-20 bg-[#00b5ad] mr-0 ml-auto rounded-full"></div>
+                  </div>
+                  <button 
+                    onClick={() => {
+                      const element = document.getElementById('products');
+                      if (element) element.scrollIntoView({ behavior: 'smooth' });
+                    }}
+                    className="text-[#00b5ad] hover:text-[#008c86] font-bold text-sm flex items-center gap-1 transition-colors"
+                  >
+                    عرض الكل <ChevronLeft size={16} />
+                  </button>
+                </div>
+
+                {latestLoading ? (
+                  <div className="flex justify-center py-10">
+                    <Loader2 className="w-10 h-10 text-[#00b5ad] animate-spin" />
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                    {latestProducts.map((product) => (
+                      <ProductCard key={product.id} product={product} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            </section>
+
+            {/* Best Sellers Section */}
+            <section className="py-16 bg-slate-50">
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div className="flex items-center justify-between mb-10">
+                  <div className="text-right">
+                    <h2 className="text-3xl font-bold text-slate-900 mb-2">الأكثر مبيعاً</h2>
+                    <div className="h-1 w-20 bg-[#00b5ad] mr-0 ml-auto rounded-full"></div>
+                  </div>
+                  <button 
+                    onClick={() => {
+                      const element = document.getElementById('products');
+                      if (element) element.scrollIntoView({ behavior: 'smooth' });
+                    }}
+                    className="text-[#00b5ad] hover:text-[#008c86] font-bold text-sm flex items-center gap-1 transition-colors"
+                  >
+                    عرض الكل <ChevronLeft size={16} />
+                  </button>
+                </div>
+
+                {bestLoading ? (
+                  <div className="flex justify-center py-10">
+                    <Loader2 className="w-10 h-10 text-[#00b5ad] animate-spin" />
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                    {bestSellers.map((product) => (
+                      <ProductCard key={product.id} product={product} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            </section>
+
+            {/* Recently Viewed Section */}
+            {recentlyViewed.length > 0 && (
+              <section className="py-16 bg-white">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                  <div className="flex items-center justify-between mb-10">
+                    <div className="text-right">
+                      <h2 className="text-3xl font-bold text-slate-900 mb-2">منتجات شاهدتها مؤخراً</h2>
+                      <div className="h-1 w-20 bg-[#00b5ad] mr-0 ml-auto rounded-full"></div>
+                    </div>
+                    <button 
+                      onClick={() => setCurrentView('favorites')}
+                      className="text-[#00b5ad] hover:text-[#008c86] font-bold text-sm flex items-center gap-1 transition-colors"
+                    >
+                      عرض الكل <ChevronLeft size={16} />
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                    {recentlyViewed.map((product) => (
+                      <ProductCard key={product.id} product={product} />
+                    ))}
+                  </div>
+                </div>
+              </section>
+            )}
 
             {/* Features Section */}
             <section id="about" className="py-20 bg-white">

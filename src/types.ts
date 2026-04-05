@@ -6,6 +6,9 @@ export interface Product {
   description?: string;
   image?: string;
   price?: string;
+  regularPrice?: string;
+  salePrice?: string;
+  onSale?: boolean;
   permalink?: string;
 }
 
