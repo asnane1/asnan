@@ -341,7 +341,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                activeTab === 'products' ? 'إدارة المنتجات' : 
                activeTab === 'categories' ? 'إدارة التصنيفات' : 'إدارة البنرات'}
             </h1>
-            <p className="text-slate-500">مرحباً بك في لوحة تحكم متجر أسناننا</p>
+            <p className="text-slate-500">مرحباً بك في لوحة تحكم اسناني</p>
           </div>
 
           {activeTab !== 'orders' && (
