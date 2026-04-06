@@ -32,6 +32,7 @@ import Cart from './components/Cart';
 import Favorites from './components/Favorites';
 import Checkout from './components/Checkout';
 import Login from './components/Login';
+import Shop from './components/Shop';
 import { auth, googleProvider, signInWithPopup, signOut, onAuthStateChanged, User, isAdmin, db } from './firebase';
 import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 
@@ -82,7 +83,7 @@ export default function App() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isAdminView, setIsAdminView] = useState(false);
-  const [currentView, setCurrentView] = useState<'home' | 'cart' | 'favorites' | 'checkout'>('home');
+  const [currentView, setCurrentView] = useState<'home' | 'shop' | 'cart' | 'favorites' | 'checkout'>('home');
   const [cart, setCart] = useState<{ product: Product, quantity: number }[]>([]);
   const [favorites, setFavorites] = useState<Product[]>([]);
   const [user, setUser] = useState<User | null>(null);
@@ -620,8 +621,18 @@ export default function App() {
 
             {/* Desktop Menu */}
             <div className="hidden md:flex items-center gap-8">
-              <a href="#" className="text-slate-600 hover:text-[#00b5ad] font-medium transition-colors">الرئيسية</a>
-              <a href="#products" className="text-slate-600 hover:text-[#00b5ad] font-medium transition-colors">المنتجات</a>
+              <button 
+                onClick={() => setCurrentView('home')}
+                className={`font-medium transition-colors ${currentView === 'home' ? 'text-[#00b5ad]' : 'text-slate-600 hover:text-[#00b5ad]'}`}
+              >
+                الرئيسية
+              </button>
+              <button 
+                onClick={() => setCurrentView('shop')}
+                className={`font-medium transition-colors ${currentView === 'shop' ? 'text-[#00b5ad]' : 'text-slate-600 hover:text-[#00b5ad]'}`}
+              >
+                المتجر العام
+              </button>
               <a href="#about" className="text-slate-600 hover:text-[#00b5ad] font-medium transition-colors">من نحن</a>
             </div>
 
@@ -717,8 +728,24 @@ export default function App() {
               className="md:hidden bg-white border-b border-slate-200 overflow-hidden"
             >
               <div className="px-4 pt-2 pb-6 space-y-2">
-                <a href="#" className="block px-3 py-2 text-slate-600 font-medium">الرئيسية</a>
-                <a href="#products" className="block px-3 py-2 text-slate-600 font-medium">المنتجات</a>
+                <button 
+                  onClick={() => {
+                    setCurrentView('home');
+                    setIsMenuOpen(false);
+                  }}
+                  className={`block w-full text-right px-3 py-2 font-medium ${currentView === 'home' ? 'text-[#00b5ad]' : 'text-slate-600'}`}
+                >
+                  الرئيسية
+                </button>
+                <button 
+                  onClick={() => {
+                    setCurrentView('shop');
+                    setIsMenuOpen(false);
+                  }}
+                  className={`block w-full text-right px-3 py-2 font-medium ${currentView === 'shop' ? 'text-[#00b5ad]' : 'text-slate-600'}`}
+                >
+                  المتجر العام
+                </button>
                 <a href="#about" className="block px-3 py-2 text-slate-600 font-medium">من نحن</a>
                 
                 {isUserAdmin && (
@@ -1226,6 +1253,19 @@ export default function App() {
               </div>
             </section>
           </>
+        ) : currentView === 'shop' ? (
+          <Shop 
+            products={products}
+            categories={categories}
+            onProductClick={(product) => {
+              setSelectedProduct(product);
+              addToRecentlyViewed(product);
+            }}
+            onAddToCart={addToCart}
+            onToggleFavorite={toggleFavorite}
+            favorites={favorites}
+            loading={loading}
+          />
         ) : currentView === 'cart' ? (
           <Cart 
             items={cart} 
