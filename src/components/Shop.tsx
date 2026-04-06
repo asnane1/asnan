@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Search, 
@@ -10,7 +10,8 @@ import {
   ArrowUpDown,
   ShoppingCart,
   Heart,
-  Plus
+  Plus,
+  Loader2
 } from 'lucide-react';
 import { Product } from '../types';
 
@@ -34,6 +35,8 @@ interface ShopProps {
 
 type SortOption = 'newest' | 'price-low' | 'price-high' | 'name-asc' | 'name-desc';
 
+const PRODUCTS_PER_PAGE = 12;
+
 export default function Shop({ 
   products, 
   categories, 
@@ -48,6 +51,8 @@ export default function Shop({
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<SortOption>('newest');
   const [isFilterOpen, setIsFilterOpen] = useState(true);
+  const [visibleCount, setVisibleCount] = useState(PRODUCTS_PER_PAGE);
+  const observerTarget = useRef<HTMLDivElement>(null);
 
   const parentCategories = useMemo(() => {
     return categories.filter(cat => cat.parent === 0);
@@ -84,13 +89,37 @@ export default function Shop({
         break;
       case 'newest':
       default:
-        // Assuming products are already ordered by date from API or we can use ID
         result.sort((a, b) => parseInt(b.id) - parseInt(a.id));
         break;
     }
 
     return result;
   }, [products, searchQuery, selectedParentId, selectedChildId, sortBy, categories]);
+
+  // Reset visible count when filters change
+  useEffect(() => {
+    setVisibleCount(PRODUCTS_PER_PAGE);
+  }, [searchQuery, selectedParentId, selectedChildId, sortBy]);
+
+  // Infinite scroll observer
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && visibleCount < filteredProducts.length) {
+          setVisibleCount((prev) => prev + PRODUCTS_PER_PAGE);
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    if (observerTarget.current) {
+      observer.observe(observerTarget.current);
+    }
+
+    return () => observer.disconnect();
+  }, [visibleCount, filteredProducts.length]);
+
+  const displayedProducts = filteredProducts.slice(0, visibleCount);
 
   const handleParentToggle = (id: number) => {
     if (selectedParentId === id) {
@@ -224,85 +253,100 @@ export default function Shop({
               <div className="w-12 h-12 border-4 border-[#00b5ad]/20 border-t-[#00b5ad] rounded-full animate-spin mb-4" />
               <p className="text-slate-500 font-medium">جاري تحميل المنتجات...</p>
             </div>
-          ) : filteredProducts.length > 0 ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredProducts.map(product => (
-                <motion.div
-                  key={product.id}
-                  layout
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  className="bg-white rounded-2xl overflow-hidden border border-slate-100 hover:border-[#00b5ad] transition-all group shadow-sm hover:shadow-md flex flex-col"
-                  onClick={() => onProductClick(product)}
-                >
-                  <div className="relative aspect-square bg-slate-50 p-4">
-                    {product.image ? (
-                      <img 
-                        src={product.image} 
-                        alt={product.name} 
-                        className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500"
-                        referrerPolicy="no-referrer"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-slate-200">
-                        <ShoppingCart size={64} />
-                      </div>
-                    )}
-                    
-                    {product.onSale && (
-                      <div className="absolute top-4 right-4 bg-red-500 text-white text-[10px] font-bold px-2 py-1 rounded-full">
-                        خصم
-                      </div>
-                    )}
-
-                    <button 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onToggleFavorite(product);
-                      }}
-                      className={`absolute top-4 left-4 w-8 h-8 rounded-full flex items-center justify-center transition-all shadow-sm ${
-                        favorites.some(p => p.id === product.id) 
-                          ? 'bg-red-500 text-white' 
-                          : 'bg-white text-slate-400 hover:text-red-500'
-                      }`}
-                    >
-                      <Heart size={16} fill={favorites.some(p => p.id === product.id) ? "currentColor" : "none"} />
-                    </button>
-                  </div>
-
-                  <div className="p-4 flex flex-col flex-grow">
-                    <h3 className="text-sm font-bold text-slate-900 mb-2 line-clamp-2 min-h-[40px]">
-                      {product.name}
-                    </h3>
-                    
-                    <div className="mt-auto flex items-center justify-between">
-                      <div className="flex flex-col">
-                        {product.onSale ? (
-                          <>
-                            <span className="text-[#00b5ad] font-bold text-base">{product.salePrice} ر.س</span>
-                            <span className="text-slate-400 line-through text-[10px]">{product.regularPrice} ر.س</span>
-                          </>
-                        ) : (
-                          <span className="text-[#00b5ad] font-bold text-base">
-                            {product.price ? `${product.price} ر.س` : 'اتصل للسعر'}
-                          </span>
-                        )}
-                      </div>
+          ) : displayedProducts.length > 0 ? (
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                {displayedProducts.map(product => (
+                  <motion.div
+                    key={product.id}
+                    layout
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="bg-white rounded-2xl overflow-hidden border border-slate-100 hover:border-[#00b5ad] transition-all group shadow-sm hover:shadow-md flex flex-col"
+                    onClick={() => onProductClick(product)}
+                  >
+                    <div className="relative aspect-square bg-slate-50 p-4">
+                      {product.image ? (
+                        <img 
+                          src={product.image} 
+                          alt={product.name} 
+                          className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500"
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-slate-200">
+                          <ShoppingCart size={64} />
+                        </div>
+                      )}
                       
+                      {product.onSale && (
+                        <div className="absolute top-4 right-4 bg-red-500 text-white text-[10px] font-bold px-2 py-1 rounded-full">
+                          خصم
+                        </div>
+                      )}
+
                       <button 
                         onClick={(e) => {
                           e.stopPropagation();
-                          onAddToCart(product);
+                          onToggleFavorite(product);
                         }}
-                        className="w-10 h-10 bg-[#00b5ad] text-white rounded-xl flex items-center justify-center hover:bg-[#008d87] transition-all shadow-lg shadow-[#00b5ad]/20"
+                        className={`absolute top-4 left-4 w-8 h-8 rounded-full flex items-center justify-center transition-all shadow-sm ${
+                          favorites.some(p => p.id === product.id) 
+                            ? 'bg-red-500 text-white' 
+                            : 'bg-white text-slate-400 hover:text-red-500'
+                        }`}
                       >
-                        <Plus size={20} />
+                        <Heart size={16} fill={favorites.some(p => p.id === product.id) ? "currentColor" : "none"} />
                       </button>
                     </div>
+
+                    <div className="p-4 flex flex-col flex-grow">
+                      <h3 className="text-sm font-bold text-slate-900 mb-2 line-clamp-2 min-h-[40px]">
+                        {product.name}
+                      </h3>
+                      
+                      <div className="mt-auto flex items-center justify-between">
+                        <div className="flex flex-col">
+                          {product.onSale ? (
+                            <>
+                              <span className="text-[#00b5ad] font-bold text-base">{product.salePrice} ر.س</span>
+                              <span className="text-slate-400 line-through text-[10px]">{product.regularPrice} ر.س</span>
+                            </>
+                          ) : (
+                            <span className="text-[#00b5ad] font-bold text-base">
+                              {product.price ? `${product.price} ر.س` : 'اتصل للسعر'}
+                            </span>
+                          )}
+                        </div>
+                        
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onAddToCart(product);
+                          }}
+                          className="w-10 h-10 bg-[#00b5ad] text-white rounded-xl flex items-center justify-center hover:bg-[#008d87] transition-all shadow-lg shadow-[#00b5ad]/20"
+                        >
+                          <Plus size={20} />
+                        </button>
+                      </div>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+
+              {/* Infinite Scroll Trigger */}
+              <div 
+                ref={observerTarget} 
+                className="w-full py-10 flex justify-center items-center"
+              >
+                {visibleCount < filteredProducts.length && (
+                  <div className="flex flex-col items-center gap-2">
+                    <Loader2 className="animate-spin text-[#00b5ad]" size={32} />
+                    <p className="text-sm text-slate-500">جاري تحميل المزيد...</p>
                   </div>
-                </motion.div>
-              ))}
-            </div>
+                )}
+              </div>
+            </>
           ) : (
             <div className="bg-white rounded-3xl p-12 text-center border border-slate-100">
               <div className="w-20 h-20 bg-slate-50 text-slate-300 rounded-full flex items-center justify-center mx-auto mb-6">
