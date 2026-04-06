@@ -31,6 +31,7 @@ import AdminDashboard from './components/AdminDashboard';
 import Cart from './components/Cart';
 import Favorites from './components/Favorites';
 import Checkout from './components/Checkout';
+import Login from './components/Login';
 import { auth, googleProvider, signInWithPopup, signOut, onAuthStateChanged, User, isAdmin, db } from './firebase';
 import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 
@@ -94,6 +95,8 @@ export default function App() {
   const [recentlyViewed, setRecentlyViewed] = useState<Product[]>([]);
   const [latestLoading, setLatestLoading] = useState(false);
   const [bestLoading, setBestLoading] = useState(false);
+  const [showAddedToCart, setShowAddedToCart] = useState<string | null>(null);
+  const [isLoginOpen, setIsLoginOpen] = useState(false);
 
   useEffect(() => {
     const q = query(
@@ -131,14 +134,6 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  const handleLogin = async () => {
-    try {
-      await signInWithPopup(auth, googleProvider);
-    } catch (err) {
-      console.error("Login Error:", err);
-    }
-  };
-
   const handleLogout = async () => {
     try {
       await signOut(auth);
@@ -157,6 +152,8 @@ export default function App() {
       }
       return [...prev, { product, quantity: 1 }];
     });
+    setShowAddedToCart(product.name);
+    setTimeout(() => setShowAddedToCart(null), 3000);
   };
 
   const removeFromCart = (productId: string) => {
@@ -571,11 +568,11 @@ export default function App() {
             <p className="text-slate-500 mb-8">يجب تسجيل الدخول بحساب مسؤول للوصول إلى هذه الصفحة.</p>
             {!user ? (
               <button 
-                onClick={handleLogin}
+                onClick={() => setIsLoginOpen(true)}
                 className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-all shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2"
               >
                 <LogIn size={20} />
-                تسجيل الدخول عبر جوجل
+                تسجيل الدخول
               </button>
             ) : (
               <div className="space-y-4">
@@ -692,7 +689,7 @@ export default function App() {
                 </div>
               ) : (
                 <button 
-                  onClick={handleLogin}
+                  onClick={() => setIsLoginOpen(true)}
                   className="hidden sm:flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-full text-sm font-bold hover:bg-blue-600 hover:text-white transition-all"
                 >
                   <LogIn size={16} />
@@ -739,7 +736,10 @@ export default function App() {
 
                 {!user && !authLoading && (
                   <button 
-                    onClick={handleLogin}
+                    onClick={() => {
+                      setIsLoginOpen(true);
+                      setIsMenuOpen(false);
+                    }}
                     className="w-full flex items-center justify-center gap-2 px-3 py-3 bg-blue-600 text-white rounded-xl text-sm font-bold mt-2"
                   >
                     <LogIn size={18} />
@@ -778,6 +778,35 @@ export default function App() {
           )}
         </AnimatePresence>
       </nav>
+
+      {/* Cart Notification */}
+      <AnimatePresence>
+        {showAddedToCart && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, x: '-50%' }}
+            animate={{ opacity: 1, y: 0, x: '-50%' }}
+            exit={{ opacity: 0, y: 50, x: '-50%' }}
+            className="fixed bottom-8 left-1/2 z-[100] bg-slate-900 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 min-w-[300px] border border-white/10 backdrop-blur-md"
+            dir="rtl"
+          >
+            <div className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0">
+              <CheckCircle2 size={24} className="text-white" />
+            </div>
+            <div className="flex-grow">
+              <p className="text-sm font-bold">تمت الإضافة بنجاح!</p>
+              <p className="text-xs text-slate-400 truncate max-w-[200px]">{showAddedToCart}</p>
+            </div>
+            <button 
+              onClick={() => setCurrentView('cart')}
+              className="text-xs font-bold text-[#00b5ad] hover:underline"
+            >
+              عرض السلة
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <Login isOpen={isLoginOpen} onClose={() => setIsLoginOpen(false)} />
 
       <main className="flex-grow">
         {currentView === 'home' ? (

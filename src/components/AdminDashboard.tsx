@@ -18,7 +18,8 @@ import {
   Image as ImageIcon,
   ArrowLeft,
   LogOut,
-  Monitor
+  Monitor,
+  Settings
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { auth, signOut, db } from '../firebase';
@@ -63,6 +64,33 @@ interface Order {
     quantity: number;
     total: string;
   }>;
+  meta_data: Array<{ key: string, value: any }>;
+}
+
+interface PaymentGateway {
+  id: string;
+  title: string;
+  description: string;
+  enabled: boolean;
+  method_title: string;
+  method_description: string;
+  settings?: any;
+}
+
+interface ShippingZone {
+  id: number;
+  name: string;
+  order: number;
+}
+
+interface ShippingMethod {
+  id: number;
+  instance_id: number;
+  title: string;
+  method_id: string;
+  method_title: string;
+  enabled: boolean;
+  settings?: any;
 }
 
 interface Product {
@@ -91,7 +119,7 @@ interface Category {
 }
 
 export default function AdminDashboard({ onBack }: { onBack: () => void }) {
-  const [activeTab, setActiveTab] = useState<'orders' | 'products' | 'categories' | 'banners'>('orders');
+  const [activeTab, setActiveTab] = useState<'orders' | 'products' | 'categories' | 'banners' | 'settings'>('orders');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -100,6 +128,9 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [banners, setBanners] = useState<Banner[]>([]);
+  const [paymentGateways, setPaymentGateways] = useState<PaymentGateway[]>([]);
+  const [shippingZones, setShippingZones] = useState<ShippingZone[]>([]);
+  const [shippingMethods, setShippingMethods] = useState<Record<number, ShippingMethod[]>>({});
 
   const [editingItem, setEditingItem] = useState<any>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -113,10 +144,37 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
         setBanners(bannerList);
       });
       return () => unsubscribe();
+    } else if (activeTab === 'settings') {
+      fetchSettings();
     } else {
       fetchData();
     }
   }, [activeTab]);
+
+  const fetchSettings = async () => {
+    setLoading(true);
+    try {
+      const [pgRes, szRes] = await Promise.all([
+        fetch('/api/payment-gateways'),
+        fetch('/api/shipping-zones')
+      ]);
+      const pgData = await pgRes.json();
+      const szData = await szRes.json();
+      setPaymentGateways(pgData);
+      setShippingZones(szData);
+
+      // Fetch methods for each zone
+      for (const zone of szData) {
+        const smRes = await fetch(`/api/shipping-zones/${zone.id}/methods`);
+        const smData = await smRes.json();
+        setShippingMethods(prev => ({ ...prev, [zone.id]: smData }));
+      }
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'banner' | 'product' | 'category', index?: number) => {
     const file = e.target.files?.[0];
@@ -176,7 +234,19 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
     setLoading(true);
     setError(null);
     try {
-      if (activeTab === 'banners') {
+      if (editingItem.type === 'bacs_settings') {
+        const res = await fetch(`/api/payment-gateways/${editingItem.gatewayId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            settings: {
+              account_details: editingItem.accounts
+            }
+          })
+        });
+        if (!res.ok) throw new Error('Failed to save bank details');
+        fetchSettings();
+      } else if (activeTab === 'banners') {
         if (editingItem.id) {
           const bannerRef = doc(db, 'banners', editingItem.id);
           const { id, ...data } = editingItem;
@@ -197,7 +267,10 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
           body: JSON.stringify(editingItem)
         });
 
-        if (!res.ok) throw new Error('Failed to save item');
+        if (!res.ok) {
+          const errorData = await res.json().catch(() => ({}));
+          throw new Error(errorData.message || 'فشل حفظ العنصر');
+        }
       }
       
       setSuccess('تم الحفظ بنجاح');
@@ -220,7 +293,10 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
         await deleteDoc(doc(db, 'banners', id));
       } else {
         const res = await fetch(`/api/${activeTab}/${id}`, { method: 'DELETE' });
-        if (!res.ok) throw new Error('Failed to delete item');
+        if (!res.ok) {
+          const errorData = await res.json().catch(() => ({}));
+          throw new Error(errorData.message || 'فشل حذف العنصر');
+        }
         fetchData();
       }
       setSuccess('تم الحذف بنجاح');
@@ -240,7 +316,10 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus })
       });
-      if (!res.ok) throw new Error('Failed to update status');
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.message || 'فشل تحديث الحالة');
+      }
       setSuccess('تم تحديث الحالة');
       fetchData();
       setTimeout(() => setSuccess(null), 3000);
@@ -300,6 +379,15 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
           >
             <Monitor size={20} />
             <span>البنرات</span>
+          </button>
+          <button 
+            onClick={() => setActiveTab('settings')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
+              activeTab === 'settings' ? 'bg-blue-50 text-blue-600 font-bold' : 'text-slate-500 hover:bg-slate-50'
+            }`}
+          >
+            <Settings size={20} />
+            <span>الإعدادات</span>
           </button>
         </nav>
 
@@ -427,6 +515,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                       <th className="px-6 py-4 font-bold text-slate-700">العميل</th>
                       <th className="px-6 py-4 font-bold text-slate-700">التاريخ</th>
                       <th className="px-6 py-4 font-bold text-slate-700">الإجمالي</th>
+                      <th className="px-6 py-4 font-bold text-slate-700">إثبات الدفع</th>
                       <th className="px-6 py-4 font-bold text-slate-700">الحالة</th>
                       <th className="px-6 py-4 font-bold text-slate-700">الإجراءات</th>
                     </tr>
@@ -443,6 +532,24 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                           {new Date(order.date_created).toLocaleDateString('ar-SA')}
                         </td>
                         <td className="px-6 py-4 font-bold text-slate-900">{order.total} {order.currency}</td>
+                        <td className="px-6 py-4">
+                          {order.meta_data?.find(m => m.key === '_bank_transfer_proof')?.value ? (
+                            <a 
+                              href={order.meta_data.find(m => m.key === '_bank_transfer_proof')?.value} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="w-10 h-10 rounded-lg bg-slate-100 overflow-hidden block border border-slate-200 hover:border-blue-500 transition-all"
+                            >
+                              <img 
+                                src={order.meta_data.find(m => m.key === '_bank_transfer_proof')?.value} 
+                                className="w-full h-full object-cover" 
+                                referrerPolicy="no-referrer"
+                              />
+                            </a>
+                          ) : (
+                            <span className="text-xs text-slate-400">لا يوجد</span>
+                          )}
+                        </td>
                         <td className="px-6 py-4">
                           <span className={`px-3 py-1 rounded-full text-xs font-bold ${
                             order.status === 'completed' ? 'bg-green-50 text-green-600' :
@@ -645,6 +752,157 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                   </tbody>
                 </table>
               )}
+              {activeTab === 'settings' && (
+                <div className="p-8 space-y-12">
+                  {/* Payment Gateways */}
+                  <section>
+                    <div className="flex items-center gap-3 mb-6">
+                      <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center">
+                        <ShoppingCart size={20} />
+                      </div>
+                      <h3 className="text-xl font-bold text-slate-900">طرق الدفع</h3>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {paymentGateways.map(gateway => (
+                        <div key={gateway.id} className="p-6 bg-slate-50 rounded-2xl border border-slate-100 space-y-4">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <div className="font-bold text-slate-900 mb-1">{gateway.title}</div>
+                              <div className="text-xs text-slate-500">{gateway.description}</div>
+                            </div>
+                            <button 
+                              onClick={async () => {
+                                setLoading(true);
+                                try {
+                                  await fetch(`/api/payment-gateways/${gateway.id}`, {
+                                    method: 'PUT',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ enabled: !gateway.enabled })
+                                  });
+                                  fetchSettings();
+                                  setSuccess('تم تحديث طريقة الدفع');
+                                  setTimeout(() => setSuccess(null), 3000);
+                                } catch (err: any) {
+                                  setError(err.message);
+                                } finally {
+                                  setLoading(false);
+                                }
+                              }}
+                              className={`w-12 h-6 rounded-full transition-all relative ${gateway.enabled ? 'bg-blue-600' : 'bg-slate-300'}`}
+                            >
+                              <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${gateway.enabled ? 'left-1' : 'left-7'}`}></div>
+                            </button>
+                          </div>
+                          
+                          {gateway.id === 'bacs' && (
+                            <div className="pt-4 border-t border-slate-200">
+                              <button 
+                                onClick={() => {
+                                  setEditingItem({
+                                    type: 'bacs_settings',
+                                    gatewayId: gateway.id,
+                                    accounts: gateway.settings?.account_details?.value || []
+                                  });
+                                  setIsModalOpen(true);
+                                }}
+                                className="w-full py-2 bg-white border border-slate-200 text-slate-700 rounded-xl text-xs font-bold hover:bg-slate-50 transition-all flex items-center justify-center gap-2"
+                              >
+                                <Edit size={14} />
+                                تعديل بيانات الحسابات البنكية
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+
+                  {/* Shipping Methods */}
+                  <section>
+                    <div className="flex items-center gap-3 mb-6">
+                      <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center">
+                        <Package size={20} />
+                      </div>
+                      <h3 className="text-xl font-bold text-slate-900">تكاليف الشحن</h3>
+                    </div>
+                    <div className="space-y-8">
+                      {shippingZones.map(zone => (
+                        <div key={zone.id} className="space-y-4">
+                          <div className="font-bold text-slate-700 border-b border-slate-100 pb-2">{zone.name}</div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            {shippingMethods[zone.id]?.map(method => (
+                              <div key={method.instance_id} className="p-6 bg-white rounded-2xl border border-slate-200 shadow-sm">
+                                <div className="flex items-center justify-between mb-4">
+                                  <div className="font-bold text-slate-900">{method.title}</div>
+                                  <button 
+                                    onClick={async () => {
+                                      setLoading(true);
+                                      try {
+                                        await fetch(`/api/shipping-zones/${zone.id}/methods/${method.instance_id}`, {
+                                          method: 'PUT',
+                                          headers: { 'Content-Type': 'application/json' },
+                                          body: JSON.stringify({ enabled: !method.enabled })
+                                        });
+                                        fetchSettings();
+                                        setSuccess('تم تحديث طريقة الشحن');
+                                        setTimeout(() => setSuccess(null), 3000);
+                                      } catch (err: any) {
+                                        setError(err.message);
+                                      } finally {
+                                        setLoading(false);
+                                      }
+                                    }}
+                                    className={`w-12 h-6 rounded-full transition-all relative ${method.enabled ? 'bg-blue-600' : 'bg-slate-300'}`}
+                                  >
+                                    <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${method.enabled ? 'left-1' : 'left-7'}`}></div>
+                                  </button>
+                                </div>
+                                {(method.method_id === 'flat_rate' || method.method_id === 'free_shipping') && (
+                                  <div className="space-y-2">
+                                    <label className="text-xs font-bold text-slate-500">
+                                      {method.method_id === 'flat_rate' ? 'تكلفة الشحن' : 'الحد الأدنى للطلب'}
+                                    </label>
+                                    <div className="flex gap-2">
+                                      <input 
+                                        type="text" 
+                                        defaultValue={method.settings?.cost?.value || method.settings?.min_amount?.value || '0'}
+                                        onBlur={async (e) => {
+                                          const val = e.target.value;
+                                          setLoading(true);
+                                          try {
+                                            const settings: any = {};
+                                            if (method.method_id === 'flat_rate') settings.cost = val;
+                                            else settings.min_amount = val;
+
+                                            await fetch(`/api/shipping-zones/${zone.id}/methods/${method.instance_id}`, {
+                                              method: 'PUT',
+                                              headers: { 'Content-Type': 'application/json' },
+                                              body: JSON.stringify({ settings })
+                                            });
+                                            fetchSettings();
+                                            setSuccess('تم تحديث التكلفة');
+                                            setTimeout(() => setSuccess(null), 3000);
+                                          } catch (err: any) {
+                                            setError(err.message);
+                                          } finally {
+                                            setLoading(false);
+                                          }
+                                        }}
+                                        className="flex-grow px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                                      />
+                                      <span className="flex items-center text-xs text-slate-400">ر.س</span>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -673,7 +931,113 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
               </div>
 
               <form onSubmit={handleSave} className="space-y-6">
-                {activeTab !== 'banners' && (
+                {editingItem?.type === 'bacs_settings' ? (
+                  <div className="space-y-6">
+                    <div className="flex justify-between items-center">
+                      <h3 className="font-bold text-slate-900">الحسابات البنكية</h3>
+                      <button 
+                        type="button"
+                        onClick={() => {
+                          const newAccounts = [...(editingItem.accounts || []), {
+                            account_name: '',
+                            account_number: '',
+                            bank_name: '',
+                            sort_code: '',
+                            iban: '',
+                            bic: ''
+                          }];
+                          setEditingItem({ ...editingItem, accounts: newAccounts });
+                        }}
+                        className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-all"
+                      >
+                        <Plus size={18} />
+                      </button>
+                    </div>
+                    
+                    <div className="space-y-6">
+                      {editingItem.accounts?.map((account: any, idx: number) => (
+                        <div key={idx} className="p-6 bg-slate-50 rounded-2xl border border-slate-200 relative space-y-4">
+                          <button 
+                            type="button"
+                            onClick={() => {
+                              const newAccounts = editingItem.accounts.filter((_: any, i: number) => i !== idx);
+                              setEditingItem({ ...editingItem, accounts: newAccounts });
+                            }}
+                            className="absolute top-4 left-4 text-red-500 hover:text-red-700"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                          
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-1">
+                              <label className="text-xs font-bold text-slate-500">اسم الحساب</label>
+                              <input 
+                                type="text"
+                                value={account.account_name}
+                                onChange={(e) => {
+                                  const newAccounts = [...editingItem.accounts];
+                                  newAccounts[idx].account_name = e.target.value;
+                                  setEditingItem({ ...editingItem, accounts: newAccounts });
+                                }}
+                                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-xs font-bold text-slate-500">اسم البنك</label>
+                              <input 
+                                type="text"
+                                value={account.bank_name}
+                                onChange={(e) => {
+                                  const newAccounts = [...editingItem.accounts];
+                                  newAccounts[idx].bank_name = e.target.value;
+                                  setEditingItem({ ...editingItem, accounts: newAccounts });
+                                }}
+                                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm"
+                              />
+                            </div>
+                          </div>
+                          
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-1">
+                              <label className="text-xs font-bold text-slate-500">رقم الحساب</label>
+                              <input 
+                                type="text"
+                                value={account.account_number}
+                                onChange={(e) => {
+                                  const newAccounts = [...editingItem.accounts];
+                                  newAccounts[idx].account_number = e.target.value;
+                                  setEditingItem({ ...editingItem, accounts: newAccounts });
+                                }}
+                                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-xs font-bold text-slate-500">IBAN</label>
+                              <input 
+                                type="text"
+                                value={account.iban}
+                                onChange={(e) => {
+                                  const newAccounts = [...editingItem.accounts];
+                                  newAccounts[idx].iban = e.target.value;
+                                  setEditingItem({ ...editingItem, accounts: newAccounts });
+                                }}
+                                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                      
+                      {(!editingItem.accounts || editingItem.accounts.length === 0) && (
+                        <div className="text-center py-10 text-slate-400 text-sm">
+                          لا توجد حسابات بنكية مضافة
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    {activeTab !== 'banners' && (
                   <div className="space-y-2">
                     <label className="text-sm font-bold text-slate-700">الاسم</label>
                     <input 
@@ -1012,8 +1376,10 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                     className="w-full px-4 py-3 bg-slate-100 border-none rounded-xl focus:ring-2 focus:ring-blue-500 transition-all"
                   />
                 </div>
+              </>
+            )}
 
-                <div className="flex gap-4 pt-4">
+            <div className="flex gap-4 pt-4">
                   <button 
                     type="submit"
                     disabled={loading}

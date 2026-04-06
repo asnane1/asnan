@@ -156,6 +156,145 @@ app.get("/api/orders", async (req, res) => {
   }
 });
 
+app.put("/api/orders/:id", async (req, res) => {
+  try {
+    const response = await wcRequest("PUT", `orders/${req.params.id}`, req.body);
+    const data = await response.json();
+    if (!response.ok) return res.status(response.status).json(data);
+    res.json(data);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/products", async (req, res) => {
+  try {
+    const response = await wcRequest("POST", "products", req.body);
+    const data = await response.json();
+    if (!response.ok) return res.status(response.status).json(data);
+    res.json(data);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put("/api/products/:id", async (req, res) => {
+  try {
+    const response = await wcRequest("PUT", `products/${req.params.id}`, req.body);
+    const data = await response.json();
+    if (!response.ok) return res.status(response.status).json(data);
+    res.json(data);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete("/api/products/:id", async (req, res) => {
+  try {
+    const response = await wcRequest("DELETE", `products/${req.params.id}`, null, { force: 'true' });
+    const data = await response.json();
+    if (!response.ok) return res.status(response.status).json(data);
+    res.json(data);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/categories", async (req, res) => {
+  try {
+    const response = await wcRequest("POST", "products/categories", req.body);
+    const data = await response.json();
+    if (!response.ok) return res.status(response.status).json(data);
+    res.json(data);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put("/api/categories/:id", async (req, res) => {
+  try {
+    const response = await wcRequest("PUT", `products/categories/${req.params.id}`, req.body);
+    const data = await response.json();
+    if (!response.ok) return res.status(response.status).json(data);
+    res.json(data);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete("/api/categories/:id", async (req, res) => {
+  try {
+    const response = await wcRequest("DELETE", `products/categories/${req.params.id}`, null, { force: 'true' });
+    const data = await response.json();
+    if (!response.ok) return res.status(response.status).json(data);
+    res.json(data);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get("/api/payment-gateways", async (req, res) => {
+  try {
+    const response = await wcRequest("GET", "payment_gateways");
+    const data = await response.json();
+    res.json(data);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put("/api/payment-gateways/:id", async (req, res) => {
+  try {
+    const response = await wcRequest("PUT", `payment_gateways/${req.params.id}`, req.body);
+    const data = await response.json();
+    if (!response.ok) return res.status(response.status).json(data);
+    res.json(data);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get("/api/shipping-zones", async (req, res) => {
+  try {
+    const response = await wcRequest("GET", "shipping/zones");
+    const data = await response.json();
+    res.json(data);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get("/api/shipping-zones/:id/methods", async (req, res) => {
+  try {
+    const response = await wcRequest("GET", `shipping/zones/${req.params.id}/methods`);
+    const data = await response.json();
+    res.json(data);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put("/api/shipping-zones/:zoneId/methods/:methodId", async (req, res) => {
+  try {
+    const response = await wcRequest("PUT", `shipping/zones/${req.params.zoneId}/methods/${req.params.methodId}`, req.body);
+    const data = await response.json();
+    if (!response.ok) return res.status(response.status).json(data);
+    res.json(data);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/orders", async (req, res) => {
+  try {
+    const response = await wcRequest("POST", "orders", req.body);
+    const data = await response.json();
+    res.json(data);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Vite middleware for development
 if (process.env.NODE_ENV !== "production" && !process.env.VERCEL) {
   const { createServer } = await import("vite");
