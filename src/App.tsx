@@ -469,6 +469,7 @@ export default function App() {
 
   const ProductModal = ({ product, onClose }: { product: Product, onClose: () => void }) => {
     const [currentImageIndex, setCurrentImageIndex] = useState(0);
+    const [isFullscreen, setIsFullscreen] = useState(false);
     const allImages = useMemo(() => {
       const images = [];
       if (product.image) images.push(product.image);
@@ -480,97 +481,105 @@ export default function App() {
       return images;
     }, [product]);
 
-    const nextImage = (e: React.MouseEvent) => {
-      e.stopPropagation();
+    const nextImage = (e?: React.MouseEvent) => {
+      e?.stopPropagation();
       setCurrentImageIndex((prev) => (prev + 1) % allImages.length);
     };
 
-    const prevImage = (e: React.MouseEvent) => {
-      e.stopPropagation();
+    const prevImage = (e?: React.MouseEvent) => {
+      e?.stopPropagation();
       setCurrentImageIndex((prev) => (prev - 1 + allImages.length) % allImages.length);
     };
 
     return (
-      <motion.div 
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
-        onClick={onClose}
-      >
+      <>
         <motion.div 
-          initial={{ scale: 0.9, opacity: 0, y: 20 }}
-          animate={{ scale: 1, opacity: 1, y: 0 }}
-          exit={{ scale: 0.9, opacity: 0, y: 20 }}
-          className="bg-white rounded-3xl overflow-hidden shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col md:flex-row relative"
-          onClick={(e) => e.stopPropagation()}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
+          onClick={onClose}
         >
-          <button 
-            onClick={onClose}
-            className="absolute top-4 right-4 z-20 p-2 bg-white/80 backdrop-blur-md rounded-full text-slate-600 hover:text-blue-600 transition-colors shadow-sm"
+          <motion.div 
+            initial={{ scale: 0.9, opacity: 0, y: 20 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            exit={{ scale: 0.9, opacity: 0, y: 20 }}
+            className="bg-white rounded-3xl overflow-hidden shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col md:flex-row relative"
+            onClick={(e) => e.stopPropagation()}
           >
-            <X size={24} />
-          </button>
+            <button 
+              onClick={onClose}
+              className="absolute top-4 right-4 z-20 p-2 bg-white/80 backdrop-blur-md rounded-full text-slate-600 hover:text-blue-600 transition-colors shadow-sm"
+            >
+              <X size={24} />
+            </button>
 
-          <div className="md:w-1/2 flex flex-col bg-slate-100 relative">
-            <div className="relative flex-grow h-64 md:h-[400px]">
-              {allImages.length > 0 ? (
-                <>
-                  <AnimatePresence mode="wait">
-                    <motion.img 
-                      key={currentImageIndex}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      src={allImages[currentImageIndex]} 
-                      alt={product.name} 
-                      className="w-full h-full object-contain"
-                      referrerPolicy="no-referrer"
-                    />
-                  </AnimatePresence>
-                  
-                  {allImages.length > 1 && (
-                    <>
-                      <button 
-                        onClick={prevImage}
-                        className="absolute left-4 top-1/2 -translate-y-1/2 p-2 bg-white/50 hover:bg-white/80 backdrop-blur-md rounded-full text-slate-800 transition-all shadow-sm"
-                      >
-                        <ChevronLeft size={20} />
-                      </button>
-                      <button 
-                        onClick={nextImage}
-                        className="absolute right-4 top-1/2 -translate-y-1/2 p-2 bg-white/50 hover:bg-white/80 backdrop-blur-md rounded-full text-slate-800 transition-all shadow-sm"
-                      >
-                        <ChevronRight size={20} />
-                      </button>
-                    </>
-                  )}
-                </>
-              ) : (
-                <div className="w-full h-full flex items-center justify-center text-slate-300">
-                  <ToothIcon size={120} />
+            <div className="md:w-1/2 flex flex-col bg-slate-100 relative">
+              <div 
+                className="relative flex-grow h-64 md:h-[400px] cursor-zoom-in"
+                onClick={() => setIsFullscreen(true)}
+              >
+                {allImages.length > 0 ? (
+                  <>
+                    <AnimatePresence mode="wait">
+                      <motion.img 
+                        key={currentImageIndex}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        src={allImages[currentImageIndex]} 
+                        alt={product.name} 
+                        className="w-full h-full object-contain"
+                        referrerPolicy="no-referrer"
+                      />
+                    </AnimatePresence>
+                    
+                    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/40 backdrop-blur-md text-white text-[10px] px-3 py-1 rounded-full pointer-events-none md:hidden">
+                      اضغط للتكبير
+                    </div>
+
+                    {allImages.length > 1 && (
+                      <>
+                        <button 
+                          onClick={prevImage}
+                          className="absolute left-4 top-1/2 -translate-y-1/2 p-2 bg-white/50 hover:bg-white/80 backdrop-blur-md rounded-full text-slate-800 transition-all shadow-sm z-10"
+                        >
+                          <ChevronLeft size={20} />
+                        </button>
+                        <button 
+                          onClick={nextImage}
+                          className="absolute right-4 top-1/2 -translate-y-1/2 p-2 bg-white/50 hover:bg-white/80 backdrop-blur-md rounded-full text-slate-800 transition-all shadow-sm z-10"
+                        >
+                          <ChevronRight size={20} />
+                        </button>
+                      </>
+                    )}
+                  </>
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-slate-300">
+                    <ToothIcon size={120} />
+                  </div>
+                )}
+              </div>
+
+              {allImages.length > 1 && (
+                <div className="p-4 bg-slate-50 border-t border-slate-200 flex gap-2 overflow-x-auto no-scrollbar">
+                  {allImages.map((img, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => setCurrentImageIndex(idx)}
+                      className={`flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-all ${
+                        currentImageIndex === idx ? 'border-blue-600 scale-105' : 'border-transparent opacity-60 hover:opacity-100'
+                      }`}
+                    >
+                      <img src={img} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                    </button>
+                  ))}
                 </div>
               )}
             </div>
 
-            {allImages.length > 1 && (
-              <div className="p-4 bg-slate-50 border-t border-slate-200 flex gap-2 overflow-x-auto">
-                {allImages.map((img, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => setCurrentImageIndex(idx)}
-                    className={`flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-all ${
-                      currentImageIndex === idx ? 'border-blue-600 scale-105' : 'border-transparent opacity-60 hover:opacity-100'
-                    }`}
-                  >
-                    <img src={img} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="md:w-1/2 p-8 md:p-12 overflow-y-auto text-right flex flex-col">
+            <div className="md:w-1/2 p-6 md:p-12 overflow-y-auto text-right flex flex-col">
             <div className="mb-6 flex justify-between items-start">
               <div className="flex-grow">
                 <span className="inline-block px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-xs font-bold mb-3">
@@ -625,6 +634,75 @@ export default function App() {
           </div>
         </motion.div>
       </motion.div>
+
+      <AnimatePresence>
+        {isFullscreen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] bg-black flex items-center justify-center p-0 md:p-4"
+            onClick={() => setIsFullscreen(false)}
+          >
+            <button 
+              onClick={() => setIsFullscreen(false)}
+              className="absolute top-6 right-6 z-[110] p-3 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-full text-white transition-colors"
+            >
+              <X size={28} />
+            </button>
+
+            <div className="relative w-full h-full flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+              <AnimatePresence mode="wait">
+                <motion.img 
+                  key={currentImageIndex}
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.9 }}
+                  drag="x"
+                  dragConstraints={{ left: 0, right: 0 }}
+                  onDragEnd={(_, info) => {
+                    if (info.offset.x > 100) prevImage();
+                    else if (info.offset.x < -100) nextImage();
+                  }}
+                  src={allImages[currentImageIndex]} 
+                  alt={product.name} 
+                  className="max-w-full max-h-full object-contain select-none touch-none"
+                  referrerPolicy="no-referrer"
+                />
+              </AnimatePresence>
+
+              {allImages.length > 1 && (
+                <>
+                  <button 
+                    onClick={prevImage}
+                    className="absolute left-4 top-1/2 -translate-y-1/2 p-4 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-full text-white transition-all z-[110]"
+                  >
+                    <ChevronLeft size={32} />
+                  </button>
+                  <button 
+                    onClick={nextImage}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 p-4 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-full text-white transition-all z-[110]"
+                  >
+                    <ChevronRight size={32} />
+                  </button>
+
+                  <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex gap-2 z-[110]">
+                    {allImages.map((_, idx) => (
+                      <div 
+                        key={idx}
+                        className={`w-2 h-2 rounded-full transition-all ${
+                          currentImageIndex === idx ? 'bg-white w-6' : 'bg-white/30'
+                        }`}
+                      />
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      </>
     );
   };
 
