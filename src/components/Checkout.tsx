@@ -4,7 +4,7 @@ import { ArrowRight, CheckCircle2, CreditCard, MapPin, Phone, User, ShoppingBag,
 import { Product } from '../types';
 
 interface CheckoutProps {
-  items: { product: Product, quantity: number }[];
+  items: { product: Product, quantity: number, selectedAttributes?: Record<string, string> }[];
   onComplete: (orderData: any) => void;
   onBack: () => void;
 }
@@ -144,7 +144,11 @@ export default function Checkout({ items, onComplete, onBack }: CheckoutProps) {
         },
         line_items: items.map(item => ({
           product_id: item.product.id,
-          quantity: item.quantity
+          quantity: item.quantity,
+          meta_data: item.selectedAttributes ? Object.entries(item.selectedAttributes).map(([key, value]) => ({
+            key,
+            value
+          })) : []
         })),
         shipping_lines: selectedShipping ? [
           {
@@ -474,13 +478,18 @@ export default function Checkout({ items, onComplete, onBack }: CheckoutProps) {
             </h2>
             
             <div className="max-h-60 overflow-y-auto mb-6 space-y-4 pr-2">
-              {items.map((item) => (
-                <div key={item.product.id} className="flex gap-3 items-center">
+              {items.map((item, idx) => (
+                <div key={`${item.product.id}-${idx}`} className="flex gap-3 items-center">
                   <div className="w-12 h-12 bg-slate-50 rounded-lg overflow-hidden flex-shrink-0">
                     <img src={item.product.image} alt={item.product.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                   </div>
                   <div className="flex-grow min-w-0">
                     <p className="text-sm font-bold text-slate-900 truncate">{item.product.name}</p>
+                    {item.selectedAttributes && Object.keys(item.selectedAttributes).length > 0 && (
+                      <p className="text-[10px] text-blue-600 font-medium">
+                        {Object.entries(item.selectedAttributes).map(([k, v]) => `${k}: ${v}`).join(' | ')}
+                      </p>
+                    )}
                     <p className="text-xs text-slate-500">{item.quantity} × {(item.product as any).price} ر.س</p>
                   </div>
                 </div>

@@ -26,7 +26,7 @@ import {
   ChevronRight
 } from 'lucide-react';
 import { CATEGORIES } from './constants';
-import { Product } from './types';
+import { Product, Variation } from './types';
 import AdminDashboard from './components/AdminDashboard';
 import Cart from './components/Cart';
 import Favorites from './components/Favorites';
@@ -158,25 +158,35 @@ export default function App() {
     }
   };
 
-  const addToCart = (product: Product) => {
+  const addToCart = (product: Product, selectedAttributes?: Record<string, string>, priceOverride?: string) => {
     setCart(prev => {
-      const existing = prev.find(item => item.product.id === product.id);
-      if (existing) {
-        return prev.map(item => item.product.id === product.id ? { ...item, quantity: item.quantity + 1 } : item);
+      // If it's a variation, we might want to store the specific price in the cart item
+      const itemProduct = priceOverride ? { ...product, price: priceOverride } : product;
+      
+      // Check if item with same product ID AND same attributes already exists
+      const existingIndex = prev.findIndex(item => 
+        item.product.id === product.id && 
+        JSON.stringify(item.selectedAttributes || {}) === JSON.stringify(selectedAttributes || {})
+      );
+
+      if (existingIndex > -1) {
+        return prev.map((item, idx) => 
+          idx === existingIndex ? { ...item, quantity: item.quantity + 1 } : item
+        );
       }
-      return [...prev, { product, quantity: 1 }];
+      return [...prev, { product: itemProduct, quantity: 1, selectedAttributes }];
     });
     setShowAddedToCart(product.name);
     setTimeout(() => setShowAddedToCart(null), 3000);
   };
 
-  const removeFromCart = (productId: string) => {
-    setCart(prev => prev.filter(item => item.product.id !== productId));
+  const removeFromCart = (index: number) => {
+    setCart(prev => prev.filter((_, idx) => idx !== index));
   };
 
-  const updateCartQuantity = (productId: string, quantity: number) => {
+  const updateCartQuantity = (index: number, quantity: number) => {
     if (quantity < 1) return;
-    setCart(prev => prev.map(item => item.product.id === productId ? { ...item, quantity } : item));
+    setCart(prev => prev.map((item, idx) => idx === index ? { ...item, quantity } : item));
   };
 
   const toggleFavorite = (product: Product) => {
@@ -241,12 +251,19 @@ export default function App() {
           nameEn: item.slug,
           category: item.categories[0]?.id.toString() || 'other',
           description: item.description,
-          image: item.images[0]?.src,
+          shortDescription: item.short_description,
+          image: item.images && item.images.length > 0 ? item.images[0].src : undefined,
+          images: item.images ? item.images.map((img: any) => img.src) : [],
           price: item.price,
           regularPrice: item.regular_price,
           salePrice: item.sale_price,
           onSale: item.on_sale,
-          permalink: item.permalink
+          permalink: item.permalink,
+          type: item.type,
+          attributes: item.attributes ? item.attributes.map((attr: any) => ({
+            name: attr.name,
+            options: attr.options
+          })) : []
         }));
         
         setProducts(mappedProducts);
@@ -274,12 +291,19 @@ export default function App() {
             nameEn: item.slug,
             category: item.categories[0]?.id.toString() || 'other',
             description: item.description,
-            image: item.images[0]?.src,
+            shortDescription: item.short_description,
+            image: item.images && item.images.length > 0 ? item.images[0].src : undefined,
+            images: item.images ? item.images.map((img: any) => img.src) : [],
             price: item.price,
             regularPrice: item.regular_price,
             salePrice: item.sale_price,
             onSale: item.on_sale,
-            permalink: item.permalink
+            permalink: item.permalink,
+            type: item.type,
+            attributes: item.attributes ? item.attributes.map((attr: any) => ({
+              name: attr.name,
+              options: attr.options
+            })) : []
           })));
         }
       } catch (err) {
@@ -299,12 +323,19 @@ export default function App() {
             nameEn: item.slug,
             category: item.categories[0]?.id.toString() || 'other',
             description: item.description,
-            image: item.images[0]?.src,
+            shortDescription: item.short_description,
+            image: item.images && item.images.length > 0 ? item.images[0].src : undefined,
+            images: item.images ? item.images.map((img: any) => img.src) : [],
             price: item.price,
             regularPrice: item.regular_price,
             salePrice: item.sale_price,
             onSale: item.on_sale,
-            permalink: item.permalink
+            permalink: item.permalink,
+            type: item.type,
+            attributes: item.attributes ? item.attributes.map((attr: any) => ({
+              name: attr.name,
+              options: attr.options
+            })) : []
           })));
         }
       } catch (err) {
@@ -457,7 +488,12 @@ export default function App() {
             className="w-full py-2 border-2 border-[#00b5ad] text-[#00b5ad] font-bold rounded-lg hover:bg-[#00b5ad] hover:text-white transition-all text-sm"
             onClick={(e) => {
               e.stopPropagation();
-              addToCart(product);
+              if (product.attributes && product.attributes.length > 0) {
+                setSelectedProduct(product);
+                addToRecentlyViewed(product);
+              } else {
+                addToCart(product);
+              }
             }}
           >
             إضافة للسلة
@@ -470,16 +506,101 @@ export default function App() {
   const ProductModal = ({ product, onClose }: { product: Product, onClose: () => void }) => {
     const [currentImageIndex, setCurrentImageIndex] = useState(0);
     const [isFullscreen, setIsFullscreen] = useState(false);
+    const [variations, setVariations] = useState<Variation[]>([]);
+    const [loadingVariations, setLoadingVariations] = useState(false);
+    const [selectedAttributes, setSelectedAttributes] = useState<Record<string, string>>(() => {
+      // Initialize with first option for each mandatory attribute if necessary
+      const initial: Record<string, string> = {};
+      product.attributes?.forEach(attr => {
+        if (attr.options.length > 0) {
+          initial[attr.name] = attr.options[0];
+        }
+      });
+      return initial;
+    });
+
+    useEffect(() => {
+      if (product.type === 'variable' && product.id) {
+        setLoadingVariations(true);
+        fetch(`/api/products/${product.id}/variations`)
+          .then(res => res.json())
+          .then(data => {
+            if (Array.isArray(data)) {
+              setVariations(data.map((v: any) => ({
+                id: v.id,
+                price: v.price,
+                regularPrice: v.regular_price,
+                salePrice: v.sale_price,
+                onSale: v.on_sale,
+                image: v.image?.src,
+                attributes: v.attributes.map((a: any) => ({
+                  name: a.name,
+                  option: a.option
+                }))
+              })));
+            }
+          })
+          .catch(err => console.error("Error fetching variations:", err))
+          .finally(() => setLoadingVariations(false));
+      }
+    }, [product.id, product.type]);
+
+    const selectedVariation = useMemo(() => {
+      if (variations.length === 0) return null;
+      return variations.find(v => {
+        return v.attributes.every(attr => {
+          // In WooCommerce, a variation attribute option could be empty string meaning "Any attribute value"
+          if (!attr.option) return true;
+          return selectedAttributes[attr.name] === attr.option;
+        });
+      });
+    }, [variations, selectedAttributes]);
+
     const allImages = useMemo(() => {
-      const images = [];
+      const images: string[] = [];
       if (product.image) images.push(product.image);
+      
       if (product.images && Array.isArray(product.images)) {
         product.images.forEach(img => {
-          if (img !== product.image) images.push(img);
+          if (!images.includes(img)) images.push(img);
         });
       }
+
+      // Ensure all variation images are present
+      variations.forEach(v => {
+        if (v.image && !images.includes(v.image)) {
+          images.push(v.image);
+        }
+      });
+
       return images;
-    }, [product]);
+    }, [product, variations]);
+
+    // When an image is clicked, find if it belongs to a variation and select those attributes
+    const handleThumbnailClick = (index: number) => {
+      setCurrentImageIndex(index);
+      const clickedImageUrl = allImages[index];
+      
+      // Look for a variation that uses this image
+      const matchingVariation = variations.find(v => v.image === clickedImageUrl);
+      if (matchingVariation) {
+        const newAttrs = { ...selectedAttributes };
+        matchingVariation.attributes.forEach(attr => {
+          if (attr.option) {
+            newAttrs[attr.name] = attr.option;
+          }
+        });
+        setSelectedAttributes(newAttrs);
+      }
+    };
+
+    // Reset image index when variation changes
+    useEffect(() => {
+      if (selectedVariation?.image) {
+        const idx = allImages.indexOf(selectedVariation.image);
+        if (idx !== -1) setCurrentImageIndex(idx);
+      }
+    }, [selectedVariation?.id, allImages]);
 
     const nextImage = (e?: React.MouseEvent) => {
       e?.stopPropagation();
@@ -490,6 +611,11 @@ export default function App() {
       e?.stopPropagation();
       setCurrentImageIndex((prev) => (prev - 1 + allImages.length) % allImages.length);
     };
+
+    const currentPrice = selectedVariation?.id ? selectedVariation.price : product.price;
+    const currentOnSale = selectedVariation?.id ? selectedVariation.onSale : product.onSale;
+    const currentRegularPrice = selectedVariation?.id ? selectedVariation.regularPrice : product.regularPrice;
+    const currentSalePrice = selectedVariation?.id ? selectedVariation.salePrice : product.salePrice;
 
     return (
       <>
@@ -514,22 +640,24 @@ export default function App() {
               <X size={24} />
             </button>
 
-            <div className="md:w-1/2 flex flex-col bg-slate-100 relative">
+            {/* Product Image Section */}
+            <div className="md:w-1/2 flex flex-col bg-slate-50 relative">
               <div 
-                className="relative flex-grow h-64 md:h-[400px] cursor-zoom-in"
+                className="relative flex-grow flex items-center justify-center min-h-[300px] md:min-h-[400px] cursor-zoom-in p-6"
                 onClick={() => setIsFullscreen(true)}
               >
                 {allImages.length > 0 ? (
                   <>
                     <AnimatePresence mode="wait">
                       <motion.img 
-                        key={currentImageIndex}
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
+                        key={allImages[currentImageIndex]}
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: -20 }}
+                        transition={{ duration: 0.3 }}
                         src={allImages[currentImageIndex]} 
                         alt={product.name} 
-                        className="w-full h-full object-contain"
+                        className="max-w-full max-h-full object-contain drop-shadow-xl"
                         referrerPolicy="no-referrer"
                       />
                     </AnimatePresence>
@@ -541,13 +669,13 @@ export default function App() {
                     {allImages.length > 1 && (
                       <>
                         <button 
-                          onClick={prevImage}
+                          onClick={(e) => { e.stopPropagation(); prevImage(); }}
                           className="absolute left-4 top-1/2 -translate-y-1/2 p-2 bg-white/50 hover:bg-white/80 backdrop-blur-md rounded-full text-slate-800 transition-all shadow-sm z-10"
                         >
                           <ChevronLeft size={20} />
                         </button>
                         <button 
-                          onClick={nextImage}
+                          onClick={(e) => { e.stopPropagation(); nextImage(); }}
                           className="absolute right-4 top-1/2 -translate-y-1/2 p-2 bg-white/50 hover:bg-white/80 backdrop-blur-md rounded-full text-slate-800 transition-all shadow-sm z-10"
                         >
                           <ChevronRight size={20} />
@@ -562,72 +690,137 @@ export default function App() {
                 )}
               </div>
 
+              {/* Thumbnails Gallery */}
               {allImages.length > 1 && (
-                <div className="p-4 bg-slate-50 border-t border-slate-200 flex gap-2 overflow-x-auto no-scrollbar">
-                  {allImages.map((img, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => setCurrentImageIndex(idx)}
-                      className={`flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-all ${
-                        currentImageIndex === idx ? 'border-blue-600 scale-105' : 'border-transparent opacity-60 hover:opacity-100'
-                      }`}
-                    >
-                      <img src={img} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                    </button>
-                  ))}
+                <div className="px-6 pb-6 mt-auto">
+                  <div className="flex gap-2 justify-center overflow-x-auto py-2 no-scrollbar">
+                    {allImages.map((img, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => handleThumbnailClick(idx)}
+                        className={`relative w-16 h-16 rounded-xl overflow-hidden flex-shrink-0 border-2 transition-all duration-300 ${
+                          currentImageIndex === idx 
+                            ? 'border-blue-500 scale-110 shadow-md ring-2 ring-blue-500/20' 
+                            : 'border-transparent opacity-50 hover:opacity-100 hover:border-slate-300'
+                        }`}
+                      >
+                        <img 
+                          src={img} 
+                          alt={`${product.name} - ${idx}`} 
+                          className="w-full h-full object-cover"
+                          referrerPolicy="no-referrer"
+                        />
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
 
-            <div className="md:w-1/2 p-6 md:p-12 overflow-y-auto text-right flex flex-col">
-            <div className="mb-6 flex justify-between items-start">
-              <div className="flex-grow">
-                <span className="inline-block px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-xs font-bold mb-3">
-                  {getCategoryName(product.category)}
-                </span>
-                <h2 className="text-2xl md:text-3xl font-bold text-slate-900 mb-2">{product.name}</h2>
-                <p className="text-xl font-bold text-blue-600">
-                  {(product as any).price ? `${(product as any).price} ر.س` : 'اتصل للسعر'}
-                </p>
+            {/* Product Details Section */}
+            <div className="md:w-1/2 p-8 md:p-12 overflow-y-auto text-right flex flex-col bg-white">
+              <div className="mb-8 flex justify-between items-start">
+                <div className="flex-grow">
+                  <span className="inline-block px-4 py-1.5 bg-blue-600/10 text-blue-600 rounded-full text-xs font-black mb-4 tracking-wide">
+                    {getCategoryName(product.category).toUpperCase()}
+                  </span>
+                  <h2 className="text-3xl md:text-4xl font-black text-slate-900 mb-4 leading-tight">{product.name}</h2>
+                  <div className="flex flex-col items-end">
+                    {currentOnSale ? (
+                      <div className="flex items-center gap-4">
+                        <span className="text-slate-400 line-through text-lg font-bold">{currentRegularPrice} ر.س</span>
+                        <span className="text-3xl font-black text-red-500">{currentSalePrice} ر.س</span>
+                      </div>
+                    ) : (
+                      <p className="text-3xl font-black text-blue-600">
+                        {currentPrice ? `${currentPrice} ر.س` : 'اتصل للسعر'}
+                      </p>
+                    )}
+                    {loadingVariations && (
+                      <span className="text-xs text-slate-400 font-bold flex items-center gap-2 mt-2">
+                        <Loader2 size={14} className="animate-spin text-blue-500" />
+                        تحديث الأسعار والمخزون...
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <button 
+                  onClick={() => toggleFavorite(product)}
+                  className={`p-4 rounded-2xl transition-all duration-300 shadow-sm hover:shadow-md ${
+                    favorites.some(p => p.id === product.id) 
+                      ? 'bg-red-50 text-red-500 scale-105' 
+                      : 'bg-slate-50 text-slate-400 hover:text-red-500 hover:bg-white'
+                  }`}
+                >
+                  <Heart size={28} fill={favorites.some(p => p.id === product.id) ? "currentColor" : "none"} />
+                </button>
               </div>
-              <button 
-                onClick={() => toggleFavorite(product)}
-                className={`p-3 rounded-xl transition-all ${
-                  favorites.some(p => p.id === product.id) 
-                    ? 'bg-red-50 text-red-500' 
-                    : 'bg-slate-50 text-slate-400 hover:text-red-500'
-                }`}
-              >
-                <Heart size={24} fill={favorites.some(p => p.id === product.id) ? "currentColor" : "none"} />
-              </button>
-            </div>
 
-            <div className="prose prose-slate prose-sm max-w-none mb-8">
-              <h3 className="text-lg font-bold text-slate-800 mb-3">وصف المنتج</h3>
-              <div 
-                className="text-slate-600 leading-relaxed"
-                dangerouslySetInnerHTML={{ __html: product.description || 'لا يوجد وصف متاح لهذا المنتج.' }}
-              />
-            </div>
+              {product.attributes && product.attributes.length > 0 && (
+                <div className="mb-10 space-y-8">
+                  {product.attributes.map((attr, idx) => (
+                    <div key={idx} className="space-y-4">
+                      <div className="flex justify-between items-center bg-slate-50/50 p-2 rounded-lg">
+                        <span className="text-xs font-black text-blue-600 bg-blue-100/50 px-2 py-0.5 rounded uppercase tracking-widest">
+                          {selectedAttributes[attr.name] || 'لم يتم الاختيار'}
+                        </span>
+                        <h3 className="text-sm font-black text-slate-800 tracking-wider">اختر {attr.name}</h3>
+                      </div>
+                      <div className="flex flex-wrap gap-2 justify-end">
+                        {attr.options.map((option, oIdx) => (
+                          <button 
+                            key={oIdx}
+                            onClick={() => setSelectedAttributes(prev => ({ ...prev, [attr.name]: option }))}
+                            className={`px-5 py-3 rounded-2xl text-sm font-bold border transition-all duration-300 active:scale-95 ${
+                              selectedAttributes[attr.name] === option
+                                ? 'bg-blue-600 text-white border-blue-600 shadow-xl shadow-blue-600/30 scale-105'
+                                : 'bg-white text-slate-600 border-slate-200 hover:border-blue-400 hover:text-blue-600'
+                            }`}
+                          >
+                            {option}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
 
-              <div className="flex flex-col sm:flex-row gap-4 mt-auto">
+              <div className="prose prose-slate prose-sm max-w-none mb-10 border-t border-slate-100 pt-8">
+                <div className="flex items-center gap-2 justify-end mb-4 text-slate-400">
+                  <h3 className="text-xl font-black text-slate-800">وصف المنتج</h3>
+                  <div className="w-10 h-1 rounded-full bg-blue-600" />
+                </div>
+                {product.shortDescription && product.shortDescription !== product.description && (
+                  <div 
+                    className="text-slate-800 font-bold mb-6 text-base leading-relaxed p-4 bg-slate-50 rounded-2xl border-r-4 border-blue-600"
+                    dangerouslySetInnerHTML={{ __html: product.shortDescription }}
+                  />
+                )}
+                <div 
+                  className="text-slate-600 leading-relaxed space-y-4"
+                  dangerouslySetInnerHTML={{ __html: product.description || 'لا يوجد وصف متاح لهذا المنتج.' }}
+                />
+              </div>
+
+              <div className="flex flex-col sm:flex-row-reverse gap-4 mt-auto">
                 <button 
                   onClick={() => {
-                    addToCart(product);
+                    addToCart(product, selectedAttributes, currentPrice);
                     onClose();
                   }}
-                  className="flex-grow py-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-all shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2"
+                  className="flex-grow py-5 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-2xl transition-all shadow-xl shadow-blue-600/30 flex items-center justify-center gap-3 hover:-translate-y-1 active:translate-y-0 text-lg"
                 >
-                  <ShoppingCart size={20} />
+                  <ShoppingCart size={24} />
                   إضافة إلى السلة
                 </button>
                 <a 
                   href={`https://wa.me/966575034090?text=${encodeURIComponent(`السلام عليكم، أرغب في الاستفسار عن منتج: ${product.name}`)}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="px-6 py-4 bg-green-500 hover:bg-green-600 text-white font-bold rounded-xl transition-all flex items-center justify-center gap-2"
+                  className="px-8 py-5 bg-green-500 hover:bg-green-600 text-white font-black rounded-2xl transition-all flex items-center justify-center gap-3 shadow-xl shadow-green-500/20 hover:-translate-y-1 active:translate-y-0 text-lg"
                 >
-                  <Phone size={20} />
+                  <Phone size={24} />
                   واتساب
                 </a>
               </div>
@@ -1417,7 +1610,14 @@ export default function App() {
               setSelectedProduct(product);
               addToRecentlyViewed(product);
             }}
-            onAddToCart={addToCart}
+            onAddToCart={(product) => {
+              if (product.attributes && product.attributes.length > 0) {
+                setSelectedProduct(product);
+                addToRecentlyViewed(product);
+              } else {
+                addToCart(product);
+              }
+            }}
             onToggleFavorite={toggleFavorite}
             favorites={favorites}
             loading={loading}
@@ -1434,7 +1634,14 @@ export default function App() {
           <Favorites 
             items={favorites} 
             onToggleFavorite={toggleFavorite} 
-            onAddToCart={addToCart}
+            onAddToCart={(product) => {
+              if (product.attributes && product.attributes.length > 0) {
+                setSelectedProduct(product);
+                addToRecentlyViewed(product);
+              } else {
+                addToCart(product);
+              }
+            }}
             onBack={() => setCurrentView('home')}
           />
         ) : (

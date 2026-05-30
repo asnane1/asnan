@@ -4,9 +4,9 @@ import { Trash2, Plus, Minus, ShoppingBag, ArrowRight, ShoppingCart } from 'luci
 import { Product } from '../types';
 
 interface CartProps {
-  items: { product: Product, quantity: number }[];
-  onUpdateQuantity: (productId: string, quantity: number) => void;
-  onRemove: (productId: string) => void;
+  items: { product: Product, quantity: number, selectedAttributes?: Record<string, string> }[];
+  onUpdateQuantity: (index: number, quantity: number) => void;
+  onRemove: (index: number) => void;
   onCheckout: () => void;
   onBack: () => void;
 }
@@ -50,9 +50,9 @@ export default function Cart({ items, onUpdateQuantity, onRemove, onCheckout, on
       <div className="grid lg:grid-cols-3 gap-10">
         <div className="lg:col-span-2 space-y-6">
           <AnimatePresence mode="popLayout">
-            {items.map((item) => (
+            {items.map((item, idx) => (
               <motion.div 
-                key={item.product.id}
+                key={`${item.product.id}-${idx}`}
                 layout
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -71,19 +71,30 @@ export default function Cart({ items, onUpdateQuantity, onRemove, onCheckout, on
 
                 <div className="flex-grow text-right">
                   <h3 className="font-bold text-slate-900 text-lg mb-1">{item.product.name}</h3>
+                  
+                  {item.selectedAttributes && Object.keys(item.selectedAttributes).length > 0 && (
+                    <div className="flex flex-wrap gap-2 justify-end mb-2">
+                      {Object.entries(item.selectedAttributes).map(([name, value], i) => (
+                        <span key={i} className="px-2 py-0.5 bg-blue-50 text-blue-600 rounded-md text-[10px] font-bold border border-blue-100">
+                          {name}: {value}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
                   <p className="text-blue-600 font-bold mb-3">{(item.product as any).price} ر.س</p>
                   
                   <div className="flex items-center justify-between">
                     <div className="flex items-center bg-slate-100 rounded-xl p-1">
                       <button 
-                        onClick={() => onUpdateQuantity(item.product.id, item.quantity + 1)}
+                        onClick={() => onUpdateQuantity(idx, item.quantity + 1)}
                         className="p-1.5 hover:bg-white rounded-lg transition-all text-slate-600"
                       >
                         <Plus size={16} />
                       </button>
                       <span className="px-4 font-bold text-slate-900">{item.quantity}</span>
                       <button 
-                        onClick={() => onUpdateQuantity(item.product.id, item.quantity - 1)}
+                        onClick={() => onUpdateQuantity(idx, item.quantity - 1)}
                         className="p-1.5 hover:bg-white rounded-lg transition-all text-slate-600"
                         disabled={item.quantity <= 1}
                       >
@@ -92,7 +103,7 @@ export default function Cart({ items, onUpdateQuantity, onRemove, onCheckout, on
                     </div>
 
                     <button 
-                      onClick={() => onRemove(item.product.id)}
+                      onClick={() => onRemove(idx)}
                       className="p-2 text-slate-400 hover:text-red-500 transition-colors"
                     >
                       <Trash2 size={20} />

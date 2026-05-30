@@ -128,7 +128,64 @@ app.get("/api/test-connection", async (req, res) => {
 
 app.get("/api/products", async (req, res) => {
   try {
-    const response = await wcRequest("GET", "products", null, { per_page: '100', ...req.query });
+    // If a specific per_page or page is requested, do a single request as usual
+    if (req.query.per_page || req.query.page) {
+      const response = await wcRequest("GET", "products", null, { per_page: '100', ...req.query });
+      const data = await response.json();
+      return res.json(data);
+    }
+
+    // Otherwise, fetch ALL pages to guarantee loading every product ("open list")
+    // 1. Fetch the first page and check headers for total pages count
+    const firstPageResponse = await wcRequest("GET", "products", null, { per_page: '100', page: '1', ...req.query });
+    if (!firstPageResponse.ok) {
+      const errText = await firstPageResponse.text();
+      throw new Error(`WooCommerce API Error: ${errText}`);
+    }
+
+    const firstPageData = await firstPageResponse.json();
+    if (!Array.isArray(firstPageData)) {
+      return res.json(firstPageData);
+    }
+
+    let allProducts = [...firstPageData];
+
+    // Read Woocommerce/WordPress total pages header
+    const totalPagesHeader = firstPageResponse.headers.get('x-wp-totalpages');
+    const totalPages = totalPagesHeader ? parseInt(totalPagesHeader, 10) : 1;
+
+    if (totalPages > 1) {
+      // Fetch remaining pages in parallel for maximum performance
+      const pagePromises = [];
+      for (let p = 2; p <= totalPages; p++) {
+        pagePromises.push(
+          wcRequest("GET", "products", null, { per_page: '100', page: p.toString(), ...req.query })
+            .then(async (response) => {
+              if (response.ok) {
+                const data = await response.json();
+                return Array.isArray(data) ? data : [];
+              }
+              return [];
+            })
+            .catch(() => [])
+        );
+      }
+
+      const otherPagesDataArray = await Promise.all(pagePromises);
+      for (const pageData of otherPagesDataArray) {
+        allProducts = allProducts.concat(pageData);
+      }
+    }
+
+    res.json(allProducts);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get("/api/products/:id/variations", async (req, res) => {
+  try {
+    const response = await wcRequest("GET", `products/${req.params.id}/variations`, null, { per_page: '100' });
     const data = await response.json();
     res.json(data);
   } catch (error: any) {

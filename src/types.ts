@@ -4,6 +4,7 @@ export interface Product {
   nameEn: string;
   category: string;
   description?: string;
+  shortDescription?: string;
   image?: string;
   images?: string[];
   price?: string;
@@ -11,6 +12,25 @@ export interface Product {
   salePrice?: string;
   onSale?: boolean;
   permalink?: string;
+  attributes?: {
+    name: string;
+    options: string[];
+  }[];
+  type?: 'simple' | 'variable' | 'grouped' | 'external';
+  variations?: Variation[];
+}
+
+export interface Variation {
+  id: number;
+  price?: string;
+  regularPrice?: string;
+  salePrice?: string;
+  onSale?: boolean;
+  image?: string;
+  attributes: {
+    name: string;
+    option: string;
+  }[];
 }
 
 export interface Category {
