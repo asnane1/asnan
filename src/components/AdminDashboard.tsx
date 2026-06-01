@@ -19,10 +19,12 @@ import {
   ArrowLeft,
   LogOut,
   Monitor,
-  Settings
+  Settings,
+  Globe
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { auth, signOut, db } from '../firebase';
+import GoogleIntegrationTab from './GoogleIntegrationTab';
 import { 
   collection, 
   addDoc, 
@@ -119,7 +121,7 @@ interface Category {
 }
 
 export default function AdminDashboard({ onBack }: { onBack: () => void }) {
-  const [activeTab, setActiveTab] = useState<'orders' | 'products' | 'categories' | 'banners' | 'settings'>('orders');
+  const [activeTab, setActiveTab] = useState<'orders' | 'products' | 'categories' | 'banners' | 'settings' | 'google'>('orders');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -389,6 +391,15 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
             <Settings size={20} />
             <span>الإعدادات</span>
           </button>
+          <button 
+            onClick={() => setActiveTab('google')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
+              activeTab === 'google' ? 'bg-blue-50 text-blue-600 font-bold' : 'text-slate-500 hover:bg-slate-50'
+            }`}
+          >
+            <Globe size={20} />
+            <span>تكامل جوجل (SEO)</span>
+          </button>
         </nav>
 
         <div className="p-4 border-t border-slate-100 space-y-2">
@@ -427,12 +438,14 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
             <h1 className="text-2xl font-bold text-slate-900">
               {activeTab === 'orders' ? 'إدارة الطلبات' : 
                activeTab === 'products' ? 'إدارة المنتجات' : 
-               activeTab === 'categories' ? 'إدارة التصنيفات' : 'إدارة البنرات'}
+               activeTab === 'categories' ? 'إدارة التصنيفات' : 
+               activeTab === 'banners' ? 'إدارة البنرات' : 
+               activeTab === 'settings' ? 'الإعدادات العامة' : 'تكامل محركات البحث (Google SEO)'}
             </h1>
             <p className="text-slate-500">مرحباً بك في لوحة تحكم اسناني</p>
           </div>
 
-          {activeTab !== 'orders' && (
+          {activeTab !== 'orders' && activeTab !== 'settings' && activeTab !== 'google' && (
             <button 
               onClick={() => {
                 if (activeTab === 'products') {
@@ -902,6 +915,9 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                     </div>
                   </section>
                 </div>
+              )}
+              {activeTab === 'google' && (
+                <GoogleIntegrationTab products={products} />
               )}
             </div>
           )}

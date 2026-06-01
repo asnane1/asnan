@@ -3,6 +3,8 @@ import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
 import multer from "multer";
+import fs from "fs";
+import { google } from "googleapis";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -349,6 +351,434 @@ app.post("/api/orders", async (req, res) => {
     res.json(data);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+// ==========================================
+// GOOGLE INTEGRATIONS (Sitemap, merchant, indexing, performance)
+// ==========================================
+
+// Helper to retrieve all WooCommerce products
+const getAllProductsForFeeds = async () => {
+  try {
+    const firstPageResponse = await wcRequest("GET", "products", null, { per_page: "100", page: "1" });
+    if (!firstPageResponse.ok) return [];
+    
+    const firstPageData = await firstPageResponse.json();
+    if (!Array.isArray(firstPageData)) return [];
+    
+    let allProducts = [...firstPageData];
+    const totalPagesHeader = firstPageResponse.headers.get("x-wp-totalpages");
+    const totalPages = totalPagesHeader ? parseInt(totalPagesHeader, 10) : 1;
+    
+    if (totalPages > 1) {
+      const pagePromises = [];
+      for (let p = 2; p <= totalPages; p++) {
+        pagePromises.push(
+          wcRequest("GET", "products", null, { per_page: "100", page: p.toString() })
+            .then(async (response) => {
+              if (response.ok) {
+                const data = await response.json();
+                return Array.isArray(data) ? data : [];
+              }
+              return [];
+            })
+            .catch(() => [])
+        );
+      }
+      const otherPagesDataArray = await Promise.all(pagePromises);
+      for (const pageData of otherPagesDataArray) {
+        allProducts = allProducts.concat(pageData);
+      }
+    }
+    return allProducts;
+  } catch (error) {
+    console.error("Error fetching all products for Google feed/sitemap:", error);
+    return [];
+  }
+};
+
+// Helper to retrieve all WooCommerce categories
+const getAllCategoriesForSitemap = async () => {
+  try {
+    const response = await wcRequest("GET", "products/categories", null, { per_page: "100" });
+    if (!response.ok) return [];
+    const data = await response.json();
+    return Array.isArray(data) ? data : [];
+  } catch (error) {
+    console.error("Error fetching categories for sitemap:", error);
+    return [];
+  }
+};
+
+// Helper to get Google API JWT Authentication Client
+const getGoogleAuth = () => {
+  const credentialsPath = path.join(process.cwd(), "google-credentials.json");
+  if (!fs.existsSync(credentialsPath)) {
+    return null;
+  }
+  try {
+    const creds = JSON.parse(fs.readFileSync(credentialsPath, "utf-8"));
+    const auth = new google.auth.JWT({
+      email: creds.client_email,
+      key: creds.private_key,
+      scopes: [
+        "https://www.googleapis.com/auth/indexing", 
+        "https://www.googleapis.com/auth/webmasters.readonly"
+      ]
+    });
+    return auth;
+  } catch (error) {
+    console.error("Error setting up Google Auth JWT:", error);
+    return null;
+  }
+};
+
+// Site ownership verification html files (e.g. google12345.html)
+app.get("/google:verificationId.html", (req, res) => {
+  const verificationId = req.params.verificationId;
+  res.set("Content-Type", "text/html");
+  res.send(`google-site-verification: google${verificationId}.html`);
+});
+
+// Dynamic XML Sitemap
+app.get("/sitemap.xml", async (req, res) => {
+  try {
+    const host = req.get("host") || "localhost:3000";
+    const protocol = req.protocol || "http";
+    const baseUrl = `${protocol}://${host}`;
+    
+    const [products, categories] = await Promise.all([
+      getAllProductsForFeeds(),
+      getAllCategoriesForSitemap()
+    ]);
+    
+    let xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>${baseUrl}/</loc>
+    <lastmod>${new Date().toISOString().split("T")[0]}</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>${baseUrl}/cart</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.5</priority>
+  </url>`;
+
+    // Add Products to Sitemap
+    products.forEach((product: any) => {
+      const updatedDate = product.date_modified ? product.date_modified.split("T")[0] : new Date().toISOString().split("T")[0];
+      xml += `
+  <url>
+    <loc>${baseUrl}/?product=${product.id}</loc>
+    <lastmod>${updatedDate}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>`;
+    });
+
+    // Add Categories to Sitemap
+    categories.forEach((cat: any) => {
+      xml += `
+  <url>
+    <loc>${baseUrl}/?category=${cat.id}</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
+  </url>`;
+    });
+
+    xml += `
+</urlset>`;
+
+    res.set("Content-Type", "application/xml; charset=utf-8");
+    res.send(xml);
+  } catch (error: any) {
+    res.status(500).send(`<error>${error.message}</error>`);
+  }
+});
+
+// Dynamic Google Merchant XML Feed
+app.get("/google-merchant.xml", async (req, res) => {
+  try {
+    const host = req.get("host") || "localhost:3000";
+    const protocol = req.protocol || "http";
+    const baseUrl = `${protocol}://${host}`;
+    
+    const products = await getAllProductsForFeeds();
+    
+    let xml = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:g="http://base.google.com/ns/1.0">
+<channel>
+  <title>متجر اسناني - Asnanee Store</title>
+  <link>${baseUrl}</link>
+  <description>جميع مستلزمات ومنتجات العناية بالأسنان العالية الجودة</description>
+  <language>ar</language>`;
+
+    products.forEach((product: any) => {
+      if (product.status !== "publish") return;
+      
+      const id = product.id;
+      const title = product.name ? product.name.replace(/[<>&'"]/g, (c: string) => {
+        switch (c) {
+          case "<": return "&lt;";
+          case ">": return "&gt;";
+          case "&": return "&amp;";
+          case "'": return "&apos;";
+          case "\"": return "&quot;";
+          default: return c;
+        }
+      }) : "";
+      
+      let description = (product.short_description || product.description || "لا يوجد وصف متاح")
+        .replace(/<[^>]*>/g, "")
+        .trim();
+        
+      if (description.length > 1000) {
+        description = description.substring(0, 995) + "...";
+      }
+      
+      description = description.replace(/[<>&'"]/g, (c: string) => {
+        switch (c) {
+          case "<": return "&lt;";
+          case ">": return "&gt;";
+          case "&": return "&amp;";
+          case "'": return "&apos;";
+          case "\"": return "&quot;";
+          default: return c;
+        }
+      });
+
+      const link = `${baseUrl}/?product=${product.id}`;
+      const imageUrl = (product.images && product.images[0]?.src) || "";
+      const price = `${product.price || product.regular_price || "0"} SAR`;
+      const availability = product.stock_status === "instock" ? "in_stock" : "out_of_stock";
+      
+      xml += `
+  <item>
+    <g:id>${id}</g:id>
+    <g:title>${title}</g:title>
+    <g:description>${description}</g:description>
+    <g:link>${link}</g:link>
+    <g:image_link>${imageUrl}</g:image_link>
+    <g:condition>new</g:condition>
+    <g:availability>${availability}</g:availability>
+    <g:price>${price}</g:price>
+    <g:brand>Asnanee</g:brand>
+  </item>`;
+    });
+
+    xml += `
+</channel>
+</rss>`;
+
+    res.set("Content-Type", "application/xml; charset=utf-8");
+    res.send(xml);
+  } catch (error: any) {
+    res.status(500).send(`<error>${error.message}</error>`);
+  }
+});
+
+// GET configuration status
+app.get("/api/google/config", async (req, res) => {
+  try {
+    const configPath = path.join(process.cwd(), "google-credentials.json");
+    const exists = fs.existsSync(configPath);
+    if (!exists) {
+      return res.json({ configured: false });
+    }
+    const raw = fs.readFileSync(configPath, "utf-8");
+    const parsed = JSON.parse(raw);
+    res.json({
+      configured: true,
+      clientEmail: parsed.client_email,
+      projectId: parsed.project_id
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST save Google Credentials
+app.post("/api/google/config", async (req, res) => {
+  try {
+    const { serviceAccountJson } = req.body;
+    if (!serviceAccountJson) {
+      return res.status(400).json({ error: "ملف الاعتماد مفتاح JSON مطلوب" });
+    }
+
+    let parsed;
+    try {
+      parsed = typeof serviceAccountJson === "string" ? JSON.parse(serviceAccountJson) : serviceAccountJson;
+    } catch (e) {
+      return res.status(400).json({ error: "صيغة JSON غير صالحة" });
+    }
+
+    if (!parsed.client_email || !parsed.private_key) {
+      return res.status(400).json({ error: "ملف الخدمة (Service Account) غير صالح أو ينقصه حقول أساسية" });
+    }
+
+    const configPath = path.join(process.cwd(), "google-credentials.json");
+    fs.writeFileSync(configPath, JSON.stringify(parsed, null, 2), "utf-8");
+    res.json({ success: true, clientEmail: parsed.client_email, projectId: parsed.project_id });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE Google configuration
+app.delete("/api/google/config", async (req, res) => {
+  try {
+    const configPath = path.join(process.cwd(), "google-credentials.json");
+    if (fs.existsSync(configPath)) {
+      fs.unlinkSync(configPath);
+    }
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST dynamic Search Indexing submission (using Google Indexing API)
+app.post("/api/google/indexing", async (req, res) => {
+  try {
+    const { url } = req.body;
+    if (!url) return res.status(400).json({ error: "الرابط مطلوب للإرسال" });
+
+    const auth = getGoogleAuth();
+    if (!auth) {
+      return res.status(400).json({ error: "بيانات اعتماد حساب خدمات جوجل (Google Service Account) غير مهيأة" });
+    }
+
+    await auth.authorize();
+    const indexing = google.indexing({
+      version: "v3",
+      auth: auth
+    });
+
+    const response = await indexing.urlNotifications.publish({
+      requestBody: {
+        url: url,
+        type: "URL_UPDATED"
+      }
+    });
+
+    res.json({ success: true, data: response.data });
+  } catch (error: any) {
+    console.error("GSC Indexing API error:", error);
+    res.status(500).json({ error: error.message || "فشل إرسال الطلب لجوجل" });
+  }
+});
+
+// POST dynamic stats from Search Console (Search analytics performance for a product name or URL)
+app.post("/api/google/performance", async (req, res) => {
+  try {
+    const { productUrl, productName } = req.body;
+    const auth = getGoogleAuth();
+    if (!auth) {
+      return res.json({ 
+        notConfigured: true,
+        clicks: 0,
+        impressions: 0,
+        ctr: 0,
+        position: 0,
+        queries: []
+      });
+    }
+
+    await auth.authorize();
+    const searchconsole = google.searchconsole({
+      version: "v1",
+      auth: auth
+    });
+
+    // List properties to match our host
+    const sitesResponse = await searchconsole.sites.list({});
+    const siteList = sitesResponse.data.siteEntry || [];
+    if (siteList.length === 0) {
+      return res.json({ success: false, error: "لم يتم العثور على أية مواقع معتمدة في حساب Search Console" });
+    }
+
+    const host = req.get("host") || "";
+    let siteUrl = siteList[0].siteUrl || "";
+    // Match exact site domain if possible
+    const matched = siteList.find(s => s.siteUrl?.includes(host));
+    if (matched) {
+      siteUrl = matched.siteUrl || "";
+    }
+
+    // Default dates (last 30 days)
+    const endDate = new Date().toISOString().split("T")[0];
+    const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+
+    const queryPayload: any = {
+      startDate,
+      endDate,
+      dimensions: ["query"],
+      rowLimit: 15
+    };
+
+    // Filter by page URL if provided, or fallback to query filtering using product name
+    if (productUrl) {
+      queryPayload.dimensionFilterGroups = [{
+        filters: [{
+          dimension: "page",
+          operator: "equals",
+          expression: productUrl
+        }]
+      }];
+      // Add "page" dimension as well to retrieve specific performance
+      queryPayload.dimensions = ["query", "page"];
+    } else if (productName) {
+      queryPayload.dimensionFilterGroups = [{
+        filters: [{
+          dimension: "query",
+          operator: "contains",
+          expression: productName
+        }]
+      }];
+    }
+
+    const performanceResponse = await searchconsole.searchanalytics.query({
+      siteUrl: siteUrl,
+      requestBody: queryPayload
+    });
+
+    const rows = performanceResponse.data.rows || [];
+    
+    let totalClicks = 0;
+    let totalImpressions = 0;
+    let avgPosition = 0;
+    let count = 0;
+
+    const queriesList = rows.map((row: any) => {
+      const q = row.keys?.[0] || "";
+      totalClicks += row.clicks || 0;
+      totalImpressions += row.impressions || 0;
+      avgPosition += row.position || 0;
+      count++;
+      return {
+        query: q,
+        clicks: row.clicks || 0,
+        impressions: row.impressions || 0,
+        ctr: (row.ctr || 0) * 100,
+        position: row.position || 0
+      };
+    });
+
+    res.json({
+      success: true,
+      siteUrl,
+      clicks: totalClicks,
+      impressions: totalImpressions,
+      ctr: totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0,
+      position: count > 0 ? avgPosition / count : 0,
+      queries: queriesList
+    });
+  } catch (error: any) {
+    console.error("GSC Analytics error:", error);
+    res.status(500).json({ error: error.message || "خطأ أثناء جلب إحصائيات الأداء من جوجل" });
   }
 });
 
