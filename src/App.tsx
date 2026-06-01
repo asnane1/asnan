@@ -558,17 +558,17 @@ export default function App() {
 
     const allImages = useMemo(() => {
       const images: string[] = [];
-      if (product.image) images.push(product.image);
+      if (product.image && product.image !== "") images.push(product.image);
       
       if (product.images && Array.isArray(product.images)) {
         product.images.forEach(img => {
-          if (!images.includes(img)) images.push(img);
+          if (img && img !== "" && !images.includes(img)) images.push(img);
         });
       }
 
       // Ensure all variation images are present
       variations.forEach(v => {
-        if (v.image && !images.includes(v.image)) {
+        if (v.image && v.image !== "" && !images.includes(v.image)) {
           images.push(v.image);
         }
       });
@@ -1043,7 +1043,7 @@ export default function App() {
                       <button onClick={handleLogout} className="text-[10px] text-red-500 hover:underline">خروج</button>
                     </div>
                     <div className="w-8 h-8 rounded-full overflow-hidden border border-slate-200">
-                      <img src={user.photoURL || ''} alt={user.displayName || ''} className="w-full h-full object-cover" />
+                      <img src={user.photoURL || undefined} alt={user.displayName || ''} className="w-full h-full object-cover" />
                     </div>
                   </div>
                 </div>
@@ -1126,7 +1126,7 @@ export default function App() {
                 {user && (
                   <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <img src={user.photoURL || ''} className="w-10 h-10 rounded-full" />
+                      <img src={user.photoURL || undefined} className="w-10 h-10 rounded-full" />
                       <div>
                         <p className="text-sm font-bold text-slate-900">{user.displayName}</p>
                         <p className="text-xs text-slate-500">{user.email}</p>

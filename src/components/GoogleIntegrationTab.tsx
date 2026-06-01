@@ -530,7 +530,7 @@ export default function GoogleIntegrationTab({ products }: { products: Product[]
                 <div key={product.id} className="p-3 bg-slate-50 hover:bg-slate-100/70 border border-slate-100 rounded-2xl flex items-center justify-between gap-3 transition-all">
                   <div className="flex items-center gap-3 overflow-hidden">
                     <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 border border-slate-200">
-                      <img src={product.images[0]?.src || ""} alt={product.name} className="w-full h-full object-cover" />
+                      <img src={product.images[0]?.src || undefined} alt={product.name} className="w-full h-full object-cover" />
                     </div>
                     <div className="overflow-hidden">
                       <h4 className="text-xs font-black text-slate-900 truncate">{product.name}</h4>
@@ -598,7 +598,7 @@ export default function GoogleIntegrationTab({ products }: { products: Product[]
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-center gap-3 overflow-hidden">
                         <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 border border-slate-200">
-                          <img src={product.images[0]?.src || ""} alt={product.name} className="w-full h-full object-cover" />
+                          <img src={product.images[0]?.src || undefined} alt={product.name} className="w-full h-full object-cover" />
                         </div>
                         <div className="overflow-hidden">
                           <h4 className="text-xs font-black text-slate-800 truncate" title={product.name}>{product.name}</h4>

@@ -406,7 +406,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
           {auth.currentUser && (
             <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl mb-2">
               <div className="w-8 h-8 rounded-full overflow-hidden border border-slate-200">
-                <img src={auth.currentUser.photoURL || ''} alt={auth.currentUser.displayName || ''} className="w-full h-full object-cover" />
+                <img src={auth.currentUser.photoURL || undefined} alt={auth.currentUser.displayName || ''} className="w-full h-full object-cover" />
               </div>
               <div className="flex-grow overflow-hidden">
                 <p className="text-xs font-bold text-slate-900 truncate">{auth.currentUser.displayName}</p>
@@ -611,7 +611,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-3">
                             <div className="w-10 h-10 rounded-lg bg-slate-100 overflow-hidden flex-shrink-0">
-                              {product.images?.[0] ? (
+                              {product.images?.[0]?.src ? (
                                 <img src={product.images[0].src} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                               ) : <ImageIcon className="w-full h-full p-2 text-slate-300" />}
                             </div>
@@ -678,7 +678,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-3">
                             <div className="w-10 h-10 rounded-lg bg-slate-100 overflow-hidden flex-shrink-0">
-                              {cat.image ? (
+                              {cat.image?.src ? (
                                 <img src={cat.image.src} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                               ) : <ImageIcon className="w-full h-full p-2 text-slate-300" />}
                             </div>
