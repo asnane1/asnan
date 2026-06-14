@@ -18,6 +18,8 @@ export interface Product {
   }[];
   type?: 'simple' | 'variable' | 'grouped' | 'external';
   variations?: Variation[];
+  catalogVisibility?: string;
+  status?: string;
 }
 
 export interface Variation {

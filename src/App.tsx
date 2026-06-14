@@ -263,7 +263,9 @@ export default function App() {
           attributes: item.attributes ? item.attributes.map((attr: any) => ({
             name: attr.name,
             options: attr.options
-          })) : []
+          })) : [],
+          catalogVisibility: item.catalog_visibility,
+          status: item.status
         }));
         
         setProducts(mappedProducts);
@@ -303,7 +305,9 @@ export default function App() {
             attributes: item.attributes ? item.attributes.map((attr: any) => ({
               name: attr.name,
               options: attr.options
-            })) : []
+            })) : [],
+            catalogVisibility: item.catalog_visibility,
+            status: item.status
           })));
         }
       } catch (err) {
@@ -335,7 +339,9 @@ export default function App() {
             attributes: item.attributes ? item.attributes.map((attr: any) => ({
               name: attr.name,
               options: attr.options
-            })) : []
+            })) : [],
+            catalogVisibility: item.catalog_visibility,
+            status: item.status
           })));
         }
       } catch (err) {
@@ -379,6 +385,9 @@ export default function App() {
 
   const filteredProducts = useMemo(() => {
     return products.filter(product => {
+      if (product.catalogVisibility === 'hidden' || product.status === 'draft') {
+        return false;
+      }
       const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
                            product.nameEn.toLowerCase().includes(searchQuery.toLowerCase());
       return matchesSearch;
@@ -1506,7 +1515,7 @@ export default function App() {
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                    {latestProducts.map((product) => (
+                    {latestProducts.filter(p => p.catalogVisibility !== 'hidden' && p.status !== 'draft').map((product) => (
                       <ProductCard key={product.id} product={product} />
                     ))}
                   </div>
@@ -1539,7 +1548,7 @@ export default function App() {
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                    {bestSellers.map((product) => (
+                    {bestSellers.filter(p => p.catalogVisibility !== 'hidden' && p.status !== 'draft').map((product) => (
                       <ProductCard key={product.id} product={product} />
                     ))}
                   </div>

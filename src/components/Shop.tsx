@@ -60,6 +60,9 @@ export default function Shop({
 
   const filteredProducts = useMemo(() => {
     let result = products.filter(product => {
+      if (product.catalogVisibility === 'hidden' || product.status === 'draft') {
+        return false;
+      }
       const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
                            product.nameEn.toLowerCase().includes(searchQuery.toLowerCase());
       

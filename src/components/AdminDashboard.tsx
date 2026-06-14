@@ -110,6 +110,7 @@ interface Product {
   stock_status: string;
   manage_stock: boolean;
   stock_quantity: number | null;
+  catalog_visibility?: string;
 }
 
 interface Category {
@@ -456,7 +457,8 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                     description: '', 
                     images: [{ src: '' }], 
                     categories: [],
-                    status: 'publish'
+                    status: 'publish',
+                    catalog_visibility: 'visible'
                   });
                 } else if (activeTab === 'categories') {
                   setEditingItem({ 
@@ -602,6 +604,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                       <th className="px-6 py-4 font-bold text-slate-700 text-sm">السعر</th>
                       <th className="px-6 py-4 font-bold text-slate-700 text-sm">المخزون</th>
                       <th className="px-6 py-4 font-bold text-slate-700 text-sm">الحالة</th>
+                      <th className="px-6 py-4 font-bold text-slate-700 text-sm">الظهور للعملاء</th>
                       <th className="px-6 py-4 font-bold text-slate-700 text-sm">الإجراءات</th>
                     </tr>
                   </thead>
@@ -639,6 +642,33 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                           }`}>
                             {product.status === 'publish' ? 'منشور' : product.status === 'draft' ? 'مسودة' : 'خاص'}
                           </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <button 
+                            onClick={async () => {
+                              const newVisibility = product.catalog_visibility === 'hidden' ? 'visible' : 'hidden';
+                              try {
+                                const res = await fetch(`/api/products/${product.id}`, {
+                                  method: 'PUT',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ catalog_visibility: newVisibility })
+                                });
+                                if (!res.ok) throw new Error('فشل تحديث حالة الظهور للعملاء');
+                                setProducts(prev => prev.map(p => p.id === product.id ? { ...p, catalog_visibility: newVisibility } : p));
+                              } catch (err: any) {
+                                setError(`حدث خطأ أثناء التحديث: ${err.message}`);
+                              }
+                            }}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                              product.catalog_visibility === 'hidden' 
+                                ? 'bg-rose-50 text-rose-600 hover:bg-rose-100' 
+                                : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100'
+                            }`}
+                            title="اضغط للتبديل بين إخفاء وإظهار المنتج للعملاء"
+                          >
+                            <span className={`w-2 h-2 rounded-full ${product.catalog_visibility === 'hidden' ? 'bg-rose-500 animate-pulse' : 'bg-emerald-500'}`} />
+                            {product.catalog_visibility === 'hidden' ? 'مخفي' : 'مرئي للجميع'}
+                          </button>
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex gap-2">
@@ -1157,7 +1187,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
 
                 {activeTab === 'products' && (
                   <>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                       <div className="space-y-2">
                         <label className="text-sm font-bold text-slate-700">نوع المنتج</label>
                         <select 
@@ -1179,6 +1209,17 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                           <option value="publish">منشور</option>
                           <option value="draft">مسودة</option>
                           <option value="private">خاص</option>
+                        </select>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-sm font-bold text-slate-700">ظهور المنتج</label>
+                        <select 
+                          value={editingItem?.catalog_visibility || 'visible'}
+                          onChange={(e) => setEditingItem({ ...editingItem, catalog_visibility: e.target.value })}
+                          className="w-full px-4 py-3 bg-slate-100 border-none rounded-xl focus:ring-2 focus:ring-blue-500 transition-all"
+                        >
+                          <option value="visible">مرئي للجميع (Visible)</option>
+                          <option value="hidden">مخفي عن العملاء (Hidden)</option>
                         </select>
                       </div>
                     </div>
