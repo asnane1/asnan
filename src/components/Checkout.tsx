@@ -61,8 +61,41 @@ export default function Checkout({ items, onComplete, onBack }: CheckoutProps) {
       const pgData = await pgRes.json();
       const szData = await szRes.json();
 
-      setPaymentMethods(pgData.filter((m: any) => m.enabled));
-      if (pgData.length > 0) setSelectedPayment(pgData.find((m: any) => m.enabled)?.id || '');
+      const localizedMethods = Array.isArray(pgData) ? pgData.map((m: any) => {
+        if (m.id === 'bacs') {
+          return {
+            ...m,
+            title: m.title && m.title.includes('التحويل') ? m.title : 'التحويل البنكي المباشر (البنك)',
+            description: m.description && m.description.includes('تحويل') ? m.description : 'الدفع من خلال تحويل المبلغ لحسابنا البنكي ورفع إيصال التحويل للمتابعة.'
+          };
+        }
+        if (m.id === 'cod') {
+          return {
+            ...m,
+            title: m.title && m.title.includes('الاستلام') ? m.title : 'الدفع عند الاستلام (COD)',
+            description: m.description && m.description.includes('الاستلام') ? m.description : 'الدفع نقداً أو ببطاقة الصرف عند استلام طلبك من مندوب الشحن.'
+          };
+        }
+        return m;
+      }) : [];
+
+      let enabledMethods = localizedMethods.filter((m: any) => m.enabled);
+
+      // Ensure Cash on Delivery (COD) is always available as a payment option for customers
+      const hasCodEnabled = enabledMethods.some((m: any) => m.id === 'cod');
+      if (!hasCodEnabled) {
+        enabledMethods.push({
+          id: 'cod',
+          title: 'الدفع عند الاستلام (COD)',
+          description: 'الدفع نقداً أو ببطاقة الصرف عند استلام طلبك من مندوب الشحن.',
+          enabled: true
+        });
+      }
+
+      setPaymentMethods(enabledMethods);
+      if (enabledMethods.length > 0) {
+        setSelectedPayment(enabledMethods[0].id || '');
+      }
 
       // For simplicity, we fetch methods from the first zone (usually 'Everywhere' or 'Saudi Arabia')
       if (szData.length > 0) {
@@ -158,6 +191,8 @@ export default function Checkout({ items, onComplete, onBack }: CheckoutProps) {
           }
         ] : [],
         customer_note: formData.notes,
+        total: total.toString(),
+        currency: 'SAR',
         meta_data: proofUrl ? [
           {
             key: '_bank_transfer_proof',

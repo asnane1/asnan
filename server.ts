@@ -5,9 +5,30 @@ import { fileURLToPath } from "url";
 import multer from "multer";
 import fs from "fs";
 import { google } from "googleapis";
+import { initializeApp } from "firebase/app";
+import { 
+  getFirestore, 
+  collection, 
+  getDocs, 
+  getDoc, 
+  doc, 
+  setDoc, 
+  addDoc, 
+  updateDoc, 
+  deleteDoc, 
+  query, 
+  orderBy 
+} from "firebase/firestore";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Initialize Firebase App and Firestore on backend using config file
+const firebaseConfig = JSON.parse(
+  fs.readFileSync(path.join(process.cwd(), "firebase-applet-config.json"), "utf8")
+);
+const firebaseApp = initializeApp(firebaseConfig);
+const db = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
 
 const app = express();
 app.use(express.json());
@@ -207,21 +228,38 @@ app.get("/api/categories", async (req, res) => {
 
 app.get("/api/orders", async (req, res) => {
   try {
-    const response = await wcRequest("GET", "orders", null, { per_page: '50' });
-    const data = await response.json();
-    res.json(data);
+    const ordersCol = collection(db, "orders");
+    const q = query(ordersCol, orderBy("date_created", "desc"));
+    const snapshot = await getDocs(q);
+    const ordersList = snapshot.docs.map(docSnap => ({
+      ...docSnap.data()
+    }));
+    res.json(ordersList);
   } catch (error: any) {
+    console.error("Error reading orders from Firestore:", error);
     res.status(500).json({ error: error.message });
   }
 });
 
 app.put("/api/orders/:id", async (req, res) => {
   try {
-    const response = await wcRequest("PUT", `orders/${req.params.id}`, req.body);
-    const data = await response.json();
-    if (!response.ok) return res.status(response.status).json(data);
-    res.json(data);
+    const orderId = req.params.id;
+    const orderDocRef = doc(db, "orders", orderId);
+    
+    const orderSnap = await getDoc(orderDocRef);
+    if (!orderSnap.exists()) {
+      return res.status(404).json({ error: "الطلب غير موجود" });
+    }
+    
+    await updateDoc(orderDocRef, {
+      status: req.body.status,
+      date_modified: new Date().toISOString()
+    });
+    
+    const finalSnap = await getDoc(orderDocRef);
+    res.json(finalSnap.data());
   } catch (error: any) {
+    console.error("Error updating order in Firestore:", error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -292,64 +330,196 @@ app.delete("/api/categories/:id", async (req, res) => {
   }
 });
 
+const DEFAULT_GATEWAYS = [
+  {
+    id: "bacs",
+    title: "التحويل البنكي المباشر (البنك)",
+    description: "الدفع من خلال تحويل المبلغ لحسابنا البنكي ورفع إيصال التحويل للمتابعة.",
+    enabled: true,
+    settings: {
+      account_details: { value: [] }
+    }
+  },
+  {
+    id: "cod",
+    title: "الدفع عند الاستلام (COD)",
+    description: "الدفع نقداً أو ببطاقة الصرف عند استلام طلبك من مندوب الشحن.",
+    enabled: true,
+    settings: {}
+  }
+];
+
+const DEFAULT_ZONES = [
+  {
+    id: "sa",
+    name: "المملكة العربية السعودية"
+  }
+];
+
+const DEFAULT_METHODS: Record<string, any[]> = {
+  sa: [
+    {
+      instance_id: 1,
+      method_id: "flat_rate",
+      title: "شحن ثابت",
+      enabled: true,
+      settings: {
+        cost: {
+          value: "25"
+        }
+      }
+    },
+    {
+      instance_id: 2,
+      method_id: "free_shipping",
+      title: "شحن مجاني",
+      enabled: false,
+      settings: {
+        min_amount: {
+          value: "300"
+        }
+      }
+    }
+  ]
+};
+
 app.get("/api/payment-gateways", async (req, res) => {
   try {
-    const response = await wcRequest("GET", "payment_gateways");
-    const data = await response.json();
-    res.json(data);
+    const colSnap = await getDocs(collection(db, "payment_gateways"));
+    if (colSnap.empty) {
+      for (const gateway of DEFAULT_GATEWAYS) {
+        await setDoc(doc(db, "payment_gateways", gateway.id), gateway);
+      }
+      return res.json(DEFAULT_GATEWAYS);
+    }
+    const list = colSnap.docs.map(docSnap => ({ ...docSnap.data() }));
+    // Sort so bacs and cod are consistent
+    list.sort((a: any, b: any) => (a.id === "bacs" ? -1 : 1));
+    res.json(list);
   } catch (error: any) {
+    console.error("Error getting payment gateways:", error);
     res.status(500).json({ error: error.message });
   }
 });
 
 app.put("/api/payment-gateways/:id", async (req, res) => {
   try {
-    const response = await wcRequest("PUT", `payment_gateways/${req.params.id}`, req.body);
-    const data = await response.json();
-    if (!response.ok) return res.status(response.status).json(data);
-    res.json(data);
+    const gatewayId = req.params.id;
+    const body = req.body;
+    const docRef = doc(db, "payment_gateways", gatewayId);
+    
+    const existingSnap = await getDoc(docRef);
+    const existingData = existingSnap.exists() ? existingSnap.data() : {};
+    
+    const updateData: any = {};
+    if (body.enabled !== undefined) updateData.enabled = body.enabled;
+    if (body.title !== undefined) updateData.title = body.title;
+    if (body.description !== undefined) updateData.description = body.description;
+    
+    if (body.settings !== undefined) {
+      const mergedSettings = { ...(existingData.settings || {}), ...body.settings };
+      if (body.settings.account_details !== undefined && Array.isArray(body.settings.account_details)) {
+        mergedSettings.account_details = { value: body.settings.account_details };
+      }
+      updateData.settings = mergedSettings;
+    }
+    
+    await setDoc(docRef, updateData, { merge: true });
+    
+    const finalSnap = await getDoc(docRef);
+    res.json({ id: gatewayId, ...finalSnap.data() });
   } catch (error: any) {
+    console.error("Error updating payment gateway:", error);
     res.status(500).json({ error: error.message });
   }
 });
 
 app.get("/api/shipping-zones", async (req, res) => {
   try {
-    const response = await wcRequest("GET", "shipping/zones");
-    const data = await response.json();
-    res.json(data);
+    const colSnap = await getDocs(collection(db, "shipping_zones"));
+    if (colSnap.empty) {
+      for (const zone of DEFAULT_ZONES) {
+        await setDoc(doc(db, "shipping_zones", zone.id), zone);
+        const methods = DEFAULT_METHODS[zone.id] || [];
+        for (const method of methods) {
+          await setDoc(doc(db, "shipping_zones", zone.id, "methods", String(method.instance_id)), method);
+        }
+      }
+      return res.json(DEFAULT_ZONES);
+    }
+    const list = colSnap.docs.map(docSnap => ({ ...docSnap.data() }));
+    res.json(list);
   } catch (error: any) {
+    console.error("Error getting shipping zones:", error);
     res.status(500).json({ error: error.message });
   }
 });
 
 app.get("/api/shipping-zones/:id/methods", async (req, res) => {
   try {
-    const response = await wcRequest("GET", `shipping/zones/${req.params.id}/methods`);
-    const data = await response.json();
-    res.json(data);
+    const zoneId = req.params.id;
+    const methodsSnap = await getDocs(collection(db, "shipping_zones", zoneId, "methods"));
+    if (methodsSnap.empty) {
+      const methods = DEFAULT_METHODS[zoneId] || [];
+      for (const method of methods) {
+        await setDoc(doc(db, "shipping_zones", zoneId, "methods", String(method.instance_id)), method);
+      }
+      return res.json(methods);
+    }
+    const list = methodsSnap.docs.map(docSnap => ({ ...docSnap.data() }));
+    list.sort((a: any, b: any) => a.instance_id - b.instance_id);
+    res.json(list);
   } catch (error: any) {
+    console.error("Error getting shipping methods:", error);
     res.status(500).json({ error: error.message });
   }
 });
 
 app.put("/api/shipping-zones/:zoneId/methods/:methodId", async (req, res) => {
   try {
-    const response = await wcRequest("PUT", `shipping/zones/${req.params.zoneId}/methods/${req.params.methodId}`, req.body);
-    const data = await response.json();
-    if (!response.ok) return res.status(response.status).json(data);
-    res.json(data);
+    const { zoneId, methodId } = req.params;
+    const body = req.body;
+    const methodRef = doc(db, "shipping_zones", zoneId, "methods", methodId);
+    
+    const existingSnap = await getDoc(methodRef);
+    const existingData = existingSnap.exists() ? existingSnap.data() : {};
+    
+    const updateData: any = {};
+    if (body.enabled !== undefined) updateData.enabled = body.enabled;
+    if (body.title !== undefined) updateData.title = body.title;
+    
+    if (body.settings !== undefined) {
+      updateData.settings = { ...(existingData.settings || {}), ...body.settings };
+    }
+    
+    await setDoc(methodRef, updateData, { merge: true });
+    const finalSnap = await getDoc(methodRef);
+    res.json({ instance_id: parseInt(methodId), ...finalSnap.data() });
   } catch (error: any) {
+    console.error("Error updating shipping method:", error);
     res.status(500).json({ error: error.message });
   }
 });
 
 app.post("/api/orders", async (req, res) => {
   try {
-    const response = await wcRequest("POST", "orders", req.body);
-    const data = await response.json();
-    res.json(data);
+    const orderBody = req.body;
+    const orderNumber = Math.floor(Math.random() * 899999) + 100000;
+    const orderId = String(orderNumber);
+    
+    const newOrder = {
+      ...orderBody,
+      id: orderNumber,
+      status: req.body.status || "pending",
+      currency: orderBody.currency || "SAR",
+      date_created: new Date().toISOString(),
+      date_modified: new Date().toISOString()
+    };
+    
+    await setDoc(doc(db, "orders", orderId), newOrder);
+    res.json({ id: orderId, ...newOrder });
   } catch (error: any) {
+    console.error("Error creating order in Firestore:", error);
     res.status(500).json({ error: error.message });
   }
 });

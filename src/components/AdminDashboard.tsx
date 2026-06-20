@@ -67,6 +67,8 @@ interface Order {
     total: string;
   }>;
   meta_data: Array<{ key: string, value: any }>;
+  payment_method?: string;
+  payment_method_title?: string;
 }
 
 interface PaymentGateway {
@@ -161,8 +163,40 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
         fetch('/api/payment-gateways'),
         fetch('/api/shipping-zones')
       ]);
-      const pgData = await pgRes.json();
+      let pgData = await pgRes.json();
       const szData = await szRes.json();
+
+      if (Array.isArray(pgData)) {
+        // Enforce presence of COD if not returned by WooCommerce for some exceptional reason, so it can always be managed
+        const hasCod = pgData.some((m: any) => m.id === 'cod');
+        if (!hasCod) {
+          pgData.push({
+            id: 'cod',
+            title: 'الدفع عند الاستلام (COD)',
+            description: 'الدفع نقداً أو ببطاقة الصرف عند استلام طلبك من مندوب الشحن.',
+            enabled: false
+          });
+        }
+
+        pgData = pgData.map((m: any) => {
+          if (m.id === 'bacs') {
+            return {
+              ...m,
+              title: m.title && m.title.includes('التحويل') ? m.title : 'التحويل البنكي المباشر (البنك)',
+              description: m.description && m.description.includes('تحويل') ? m.description : 'الدفع من خلال تحويل المبلغ لحسابنا البنكي ورفع إيصال التحويل.'
+            };
+          }
+          if (m.id === 'cod') {
+            return {
+              ...m,
+              title: m.title && m.title.includes('الاستلام') ? m.title : 'الدفع عند الاستلام (COD)',
+              description: m.description && m.description.includes('الاستلام') ? m.description : 'الدفع نقداً أو ببطاقة الصرف عند استلام طلبك من مندوب الشحن.'
+            };
+          }
+          return m;
+        });
+      }
+
       setPaymentGateways(pgData);
       setShippingZones(szData);
 
@@ -220,13 +254,36 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
     setError(null);
     try {
       const res = await fetch(`/api/${activeTab}`);
-      if (!res.ok) throw new Error(`Failed to fetch ${activeTab}`);
       const data = await res.json();
-      if (activeTab === 'orders') setOrders(data);
-      else if (activeTab === 'products') setProducts(data);
-      else if (activeTab === 'categories') setCategories(data);
+      if (!res.ok) {
+        throw new Error(data.message || data.error || `فشل جلب البيانات من ${activeTab}`);
+      }
+      if (activeTab === 'orders') {
+        if (Array.isArray(data)) {
+          setOrders(data);
+        } else {
+          setOrders([]);
+          throw new Error(data.message || data.details || 'فشل جلب الطلبات، البيانات المستلمة ليست مصفوفة');
+        }
+      }
+      else if (activeTab === 'products') {
+        if (Array.isArray(data)) {
+          setProducts(data);
+        } else {
+          setProducts([]);
+          throw new Error(data.message || data.details || 'البيانات المستلمة للمنتجات ليست مصفوفة');
+        }
+      }
+      else if (activeTab === 'categories') {
+        if (Array.isArray(data)) {
+          setCategories(data);
+        } else {
+          setCategories([]);
+          throw new Error(data.message || data.details || 'البيانات المستلمة للتصنيفات ليست مصفوفة');
+        }
+      }
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || 'حدث خطأ غير متوقع');
     } finally {
       setLoading(false);
     }
@@ -530,23 +587,29 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                       <th className="px-6 py-4 font-bold text-slate-700">العميل</th>
                       <th className="px-6 py-4 font-bold text-slate-700">التاريخ</th>
                       <th className="px-6 py-4 font-bold text-slate-700">الإجمالي</th>
+                      <th className="px-6 py-4 font-bold text-slate-700">طريقة الدفع</th>
                       <th className="px-6 py-4 font-bold text-slate-700">إثبات الدفع</th>
                       <th className="px-6 py-4 font-bold text-slate-700">الحالة</th>
                       <th className="px-6 py-4 font-bold text-slate-700">الإجراءات</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
-                    {orders.map(order => (
+                    {orders && orders.map(order => (
                       <tr key={order.id} className="hover:bg-slate-50/50 transition-colors">
                         <td className="px-6 py-4 font-bold text-blue-600">#{order.id}</td>
                         <td className="px-6 py-4">
-                          <div className="font-medium text-slate-900">{order.billing.first_name} {order.billing.last_name}</div>
-                          <div className="text-xs text-slate-500">{order.billing.phone}</div>
+                          <div className="font-medium text-slate-900">{order.billing?.first_name || ''} {order.billing?.last_name || ''}</div>
+                          <div className="text-xs text-slate-500">{order.billing?.phone || ''}</div>
                         </td>
                         <td className="px-6 py-4 text-slate-600">
-                          {new Date(order.date_created).toLocaleDateString('ar-SA')}
+                          {order.date_created ? new Date(order.date_created).toLocaleDateString('ar-SA') : ''}
                         </td>
-                        <td className="px-6 py-4 font-bold text-slate-900">{order.total} {order.currency}</td>
+                        <td className="px-6 py-4 font-bold text-slate-900">{order.total || 0} {order.currency || 'SAR'}</td>
+                        <td className="px-6 py-4">
+                          <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700 ring-1 ring-inset ring-slate-600/10">
+                            {order.payment_method_title || order.payment_method || 'غير محدد'}
+                          </span>
+                        </td>
                         <td className="px-6 py-4">
                           {order.meta_data?.find(m => m.key === '_bank_transfer_proof')?.value ? (
                             <a 
@@ -573,13 +636,13 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                           }`}>
                             {order.status === 'completed' ? 'مكتمل' : 
                              order.status === 'processing' ? 'قيد التنفيذ' : 
-                             order.status === 'pending' ? 'قيد الانتظار' : order.status}
+                             order.status === 'pending' ? 'قيد الانتظار' : (order.status || 'معلق')}
                           </span>
                         </td>
                         <td className="px-6 py-4">
                           <select 
                             onChange={(e) => handleStatusUpdate(order.id, e.target.value)}
-                            value={order.status}
+                            value={order.status || 'pending'}
                             className="text-xs border-slate-200 rounded-lg focus:ring-blue-500"
                           >
                             <option value="pending">قيد الانتظار</option>

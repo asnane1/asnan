@@ -97,8 +97,24 @@ export default function App() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isAdminView, setIsAdminView] = useState(false);
   const [currentView, setCurrentView] = useState<'home' | 'shop' | 'cart' | 'favorites' | 'checkout'>('home');
-  const [cart, setCart] = useState<{ product: Product, quantity: number }[]>([]);
-  const [favorites, setFavorites] = useState<Product[]>([]);
+  const [cart, setCart] = useState<{ product: Product, quantity: number }[]>(() => {
+    try {
+      const saved = localStorage.getItem('cart');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      console.error("Error reading cart from localStorage:", e);
+      return [];
+    }
+  });
+  const [favorites, setFavorites] = useState<Product[]>(() => {
+    try {
+      const saved = localStorage.getItem('favorites');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      console.error("Error reading favorites from localStorage:", e);
+      return [];
+    }
+  });
   const [user, setUser] = useState<User | null>(null);
   const [isUserAdmin, setIsUserAdmin] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
@@ -147,6 +163,22 @@ export default function App() {
     });
     return () => unsubscribe();
   }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('cart', JSON.stringify(cart));
+    } catch (e) {
+      console.error("Error saving cart to localStorage:", e);
+    }
+  }, [cart]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('favorites', JSON.stringify(favorites));
+    } catch (e) {
+      console.error("Error saving favorites to localStorage:", e);
+    }
+  }, [favorites]);
 
   const handleLogout = async () => {
     try {

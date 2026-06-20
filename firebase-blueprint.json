@@ -27,6 +27,46 @@
         "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp" }
       },
       "required": ["imageUrl", "active", "order"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Customer order details including products, totals, status and payment.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "integer", "description": "Unique numeric ID of the order" },
+        "status": { "type": "string", "description": "Status of the order" },
+        "currency": { "type": "string", "description": "Currency of payment" },
+        "total": { "type": "string", "description": "Calculated total price" },
+        "billing": { "type": "object", "description": "Customer billing details" },
+        "shipping": { "type": "object", "description": "Customer shipping details" },
+        "line_items": { "type": "array", "description": "List of ordered products and quantities" },
+        "shipping_lines": { "type": "array", "description": "List of shipping methods chosen" },
+        "payment_method": { "type": "string", "description": "Payment method id used" },
+        "payment_method_title": { "type": "string", "description": "Payment method title" },
+        "date_created": { "type": "string", "format": "date-time", "description": "Creation timestamp" },
+        "date_modified": { "type": "string", "format": "date-time", "description": "Last modification timestamp" }
+      }
+    },
+    "PaymentGateway": {
+      "title": "Payment Gateway",
+      "description": "Payment system config including activation and details.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Gateway identifier (e.g. cod, bacs)" },
+        "title": { "type": "string", "description": "Title shown to customer" },
+        "description": { "type": "string", "description": "Payment instruction details" },
+        "enabled": { "type": "boolean", "description": "Whether gateway is active" },
+        "settings": { "type": "object", "description": "Extra configuration parameters like bank details" }
+      }
+    },
+    "ShippingZone": {
+      "title": "Shipping Zone",
+      "description": "Geographical region with target delivery shipping profiles.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique identifier of zone" },
+        "name": { "type": "string", "description": "Name of shipping zone" }
+      }
     }
   },
   "firestore": {
@@ -37,6 +77,18 @@
     "/banners/{bannerId}": {
       "schema": "Banner",
       "description": "Homepage banner documents."
+    },
+    "/orders/{orderId}": {
+      "schema": "Order",
+      "description": "System order logs."
+    },
+    "/payment_gateways/{gatewayId}": {
+      "schema": "PaymentGateway",
+      "description": "Payment methods preferences and options."
+    },
+    "/shipping_zones/{zoneId}": {
+      "schema": "ShippingZone",
+      "description": "Shipping regions configurations."
     }
   }
 }

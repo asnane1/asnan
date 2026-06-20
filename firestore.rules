@@ -73,5 +73,24 @@ service cloud.firestore {
       // Only admins can manage banners
       allow create, update, delete: if isAdmin();
     }
+
+    match /orders/{orderId} {
+      // Anyone can place an order or view order status, admins manage them
+      allow read, write: if true;
+    }
+
+    match /payment_gateways/{gatewayId} {
+      // Publicly readable for checkout, managed by the server API
+      allow read, write: if true;
+    }
+
+    match /shipping_zones/{zoneId} {
+      // Publicly readable for zones/methods, managed by server API
+      allow read, write: if true;
+
+      match /methods/{methodId} {
+        allow read, write: if true;
+      }
+    }
   }
 }
