@@ -20,7 +20,16 @@ import {
   LogOut,
   Monitor,
   Settings,
-  Globe
+  Globe,
+  Eye,
+  MapPin,
+  User,
+  Mail,
+  Phone,
+  ShoppingBag,
+  Calendar,
+  FileText,
+  Truck
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { auth, signOut, db } from '../firebase';
@@ -36,6 +45,39 @@ import {
   orderBy,
   serverTimestamp 
 } from 'firebase/firestore';
+
+function getProductImageUrl(p: any): string {
+  if (!p) return '';
+  if (typeof p.image === 'string' && p.image) return p.image;
+  if (p.image?.src && typeof p.image.src === 'string') return p.image.src;
+  if (Array.isArray(p.images) && p.images.length > 0) {
+    const firstImg = p.images[0];
+    if (typeof firstImg === 'string') return firstImg;
+    if (typeof firstImg === 'object' && firstImg?.src) return firstImg.src;
+  }
+  return '';
+}
+
+function getLineItemAttributes(item: any): Array<{ key: string, value: string }> {
+  const attrs: Array<{ key: string, value: string }> = [];
+  if (item && Array.isArray(item.meta_data)) {
+    item.meta_data.forEach((m: any) => {
+      if (m && m.key && m.value) {
+        if (!m.key.startsWith('_')) {
+          attrs.push({ key: m.key, value: String(m.value) });
+        }
+      }
+    });
+  }
+  if (item?.selectedAttributes && typeof item.selectedAttributes === 'object') {
+    Object.entries(item.selectedAttributes).forEach(([key, value]) => {
+      if (value) {
+        attrs.push({ key, value: String(value) });
+      }
+    });
+  }
+  return attrs;
+}
 
 interface Banner {
   id?: string;
@@ -61,10 +103,14 @@ interface Order {
     phone: string;
   };
   line_items: Array<{
-    id: number;
+    id?: number;
+    product_id?: string;
     name: string;
     quantity: number;
+    price?: string;
     total: string;
+    image?: string;
+    meta_data?: Array<{ key: string, value: any }>;
   }>;
   meta_data: Array<{ key: string, value: any }>;
   payment_method?: string;
@@ -139,6 +185,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
 
   const [editingItem, setEditingItem] = useState<any>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
@@ -261,6 +308,18 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
       if (activeTab === 'orders') {
         if (Array.isArray(data)) {
           setOrders(data);
+          // Fetch products as well so we can resolve any missing/unpopulated product details for existing orders
+          try {
+            const prodRes = await fetch('/api/products');
+            if (prodRes.ok) {
+              const prodData = await prodRes.json();
+              if (Array.isArray(prodData)) {
+                setProducts(prodData);
+              }
+            }
+          } catch (e) {
+            console.error('Error fetching products inside orders tab:', e);
+          }
         } else {
           setOrders([]);
           throw new Error(data.message || data.details || 'فشل جلب الطلبات، البيانات المستلمة ليست مصفوفة');
@@ -585,6 +644,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                     <tr>
                       <th className="px-6 py-4 font-bold text-slate-700">رقم الطلب</th>
                       <th className="px-6 py-4 font-bold text-slate-700">العميل</th>
+                      <th className="px-6 py-4 font-bold text-slate-700">المنتجات المطلوبة</th>
                       <th className="px-6 py-4 font-bold text-slate-700">التاريخ</th>
                       <th className="px-6 py-4 font-bold text-slate-700">الإجمالي</th>
                       <th className="px-6 py-4 font-bold text-slate-700">طريقة الدفع</th>
@@ -596,10 +656,62 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                   <tbody className="divide-y divide-slate-50">
                     {orders && orders.map(order => (
                       <tr key={order.id} className="hover:bg-slate-50/50 transition-colors">
-                        <td className="px-6 py-4 font-bold text-blue-600">#{order.id}</td>
+                        <td className="px-6 py-4 font-bold text-blue-600">
+                          <button 
+                            type="button"
+                            onClick={() => setSelectedOrder(order)}
+                            className="text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1 focus:outline-none"
+                          >
+                            <span>#{order.id}</span>
+                            <Eye size={14} className="opacity-60" />
+                          </button>
+                        </td>
                         <td className="px-6 py-4">
                           <div className="font-medium text-slate-900">{order.billing?.first_name || ''} {order.billing?.last_name || ''}</div>
                           <div className="text-xs text-slate-500">{order.billing?.phone || ''}</div>
+                        </td>
+                        <td className="px-6 py-4 max-w-xs">
+                          <div className="flex flex-col gap-2 max-h-[140px] overflow-y-auto custom-scrollbar">
+                            {order.line_items?.map((item, idx) => {
+                              const matchedProduct = products.find(p => String(p.id) === String(item.product_id || item.id));
+                              const name = item.name || matchedProduct?.name || 'منتج غير معروف';
+                              const imageUrl = item.image || getProductImageUrl(matchedProduct) || '';
+                              const itemAttrs = getLineItemAttributes(item);
+                              return (
+                                <div key={idx} className="flex gap-2 items-center text-right leading-relaxed border-b border-dashed border-slate-100 last:border-0 pb-1.5 last:pb-0">
+                                  {/* Small preview crop */}
+                                  <div className="w-8 h-8 rounded bg-slate-50 border border-slate-200/50 overflow-hidden flex-shrink-0 flex items-center justify-center">
+                                    {imageUrl ? (
+                                      <img 
+                                        src={imageUrl} 
+                                        alt={name} 
+                                        className="w-full h-full object-cover"
+                                        referrerPolicy="no-referrer"
+                                      />
+                                    ) : (
+                                      <Package className="text-slate-300" size={14} />
+                                    )}
+                                  </div>
+                                  <div>
+                                    <div className="text-xs text-slate-800 font-semibold flex items-center gap-1">
+                                      <span>{name}</span>
+                                      <span className="text-[#00b5ad] font-bold">({item.quantity || 1}x)</span>
+                                    </div>
+                                    {/* Mini attributes list */}
+                                    {itemAttrs && itemAttrs.length > 0 && (
+                                      <div className="flex flex-wrap gap-1 mt-0.5">
+                                        {itemAttrs.map((attr, mIdx) => (
+                                          <span key={mIdx} className="text-[10px] text-teal-600 bg-teal-50 px-1 py-0.2 rounded font-sans leading-none">
+                                            {attr.key}: {attr.value}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
                         </td>
                         <td className="px-6 py-4 text-slate-600">
                           {order.date_created ? new Date(order.date_created).toLocaleDateString('ar-SA') : ''}
@@ -640,16 +752,26 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                           </span>
                         </td>
                         <td className="px-6 py-4">
-                          <select 
-                            onChange={(e) => handleStatusUpdate(order.id, e.target.value)}
-                            value={order.status || 'pending'}
-                            className="text-xs border-slate-200 rounded-lg focus:ring-blue-500"
-                          >
-                            <option value="pending">قيد الانتظار</option>
-                            <option value="processing">قيد التنفيذ</option>
-                            <option value="completed">مكتمل</option>
-                            <option value="cancelled">ملغي</option>
-                          </select>
+                          <div className="flex items-center gap-2">
+                            <select 
+                              onChange={(e) => handleStatusUpdate(order.id, e.target.value)}
+                              value={order.status || 'pending'}
+                              className="text-xs border-slate-200 rounded-lg focus:ring-blue-500 py-1"
+                            >
+                              <option value="pending">قيد الانتظار</option>
+                              <option value="processing">قيد التنفيذ</option>
+                              <option value="completed">مكتمل</option>
+                              <option value="cancelled">ملغي</option>
+                            </select>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedOrder(order)}
+                              className="p-1.5 text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors flex items-center justify-center"
+                              title="عرض التفاصيل الكاملة والعنوان"
+                            >
+                              <Eye size={15} />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -1517,6 +1639,247 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                   </button>
                 </div>
               </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Order Details Modal */}
+      <AnimatePresence>
+        {selectedOrder && (
+          <div className="fixed inset-0 z-[101] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto">
+            <motion.div 
+              initial={{ scale: 0.92, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.92, opacity: 0 }}
+              className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full p-6 md:p-8 my-8 relative text-right"
+              dir="rtl"
+            >
+              {/* Header */}
+              <div className="flex justify-between items-center pb-4 border-b border-slate-200 mb-6">
+                <div>
+                  <h2 className="text-xl md:text-2xl font-bold text-slate-800 flex items-center gap-2">
+                    <ShoppingBag className="text-[#00b5ad]" />
+                    <span>تفاصيل الطلب <span className="text-[#00b5ad]">#{selectedOrder.id}</span></span>
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-1 flex items-center gap-1.5 justify-end">
+                    <span>{selectedOrder.date_created ? new Date(selectedOrder.date_created).toLocaleString('ar-SA') : ''}</span>
+                    <Calendar size={13} className="opacity-70" />
+                  </p>
+                </div>
+                <button 
+                  onClick={() => setSelectedOrder(null)} 
+                  className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-all"
+                >
+                  <X size={24} />
+                </button>
+              </div>
+
+              {/* Grid Content */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
+                
+                {/* Right Column: Customer Info & Delivery Address */}
+                <div className="space-y-6">
+                  <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100 space-y-4 text-right">
+                    <h3 className="font-bold text-slate-800 flex items-center gap-2 border-b border-slate-200/60 pb-2 text-base">
+                      <User size={18} className="text-[#00b5ad]" />
+                      <span>بيانات العميل</span>
+                    </h3>
+                    <div className="space-y-3 text-sm">
+                      <div className="flex justify-between items-center">
+                        <span className="text-slate-500">الاسم الكامل:</span>
+                        <span className="font-semibold text-slate-900">{selectedOrder.billing?.first_name || ''} {selectedOrder.billing?.last_name || ''}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-slate-500">رقم الجوال:</span>
+                        <span className="font-semibold text-slate-900 flex items-center gap-1" dir="ltr">
+                          <span>{selectedOrder.billing?.phone || ''}</span>
+                          <Phone size={13} className="text-slate-400" />
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-slate-500">البريد الإلكتروني:</span>
+                        <span className="font-semibold text-slate-900 flex items-center gap-1">
+                          <span>{selectedOrder.billing?.email || ''}</span>
+                          <Mail size={13} className="text-slate-400" />
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100 space-y-4 text-right">
+                    <h3 className="font-bold text-slate-800 flex items-center gap-2 border-b border-slate-200/60 pb-2 text-base">
+                      <MapPin size={18} className="text-[#00b5ad]" />
+                      <span>عنوان التوصيل والشحن</span>
+                    </h3>
+                    <div className="space-y-3 text-sm">
+                      <div className="flex justify-between items-start">
+                        <span className="text-slate-500 min-w-[70px]">المدينة:</span>
+                        <span className="font-semibold text-slate-900">{selectedOrder.billing?.city || 'غير محدد'}</span>
+                      </div>
+                      <div className="flex justify-between items-start">
+                        <span className="text-slate-500 min-w-[70px]">العنوان بالتفصيل:</span>
+                        <span className="font-medium text-slate-800 text-right bg-white p-2 rounded-lg border border-slate-250 flex-grow mr-4">
+                          {selectedOrder.billing?.address_1 || 'لا يوجد عنوان مسجل'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Customer Note */}
+                  <div className="bg-amber-50/50 p-4 rounded-xl border border-amber-100 space-y-2 text-right">
+                    <h4 className="text-xs font-bold text-amber-800 flex items-center gap-1.5">
+                      <FileText size={14} />
+                      <span>ملاحظات العميل على الطلب:</span>
+                    </h4>
+                    <p className="text-sm text-slate-700 bg-white p-3 rounded-lg border border-slate-100 italic">
+                      {selectedOrder.customer_note || 'لا توجد ملاحظات خاصة من العميل.'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Left Column: Products purchased, Shipping costs, payments */}
+                <div className="space-y-6">
+                  {/* Items list */}
+                  <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100 space-y-4 text-right">
+                    <h3 className="font-bold text-slate-800 flex items-center gap-2 border-b border-slate-200/60 pb-2 text-base">
+                      <Package size={18} className="text-[#00b5ad]" />
+                      <span>المنتجات المطلوبة</span>
+                    </h3>
+                    
+                    <div className="divide-y divide-slate-200/60 max-h-[350px] overflow-y-auto pr-1">
+                      {selectedOrder.line_items?.map((item, idx) => {
+                        const matchedProduct = products.find(p => String(p.id) === String(item.product_id || item.id));
+                        const name = item.name || matchedProduct?.name || 'منتج غير معروف';
+                        const price = item.price || matchedProduct?.price || '0';
+                        const totalLine = item.total || (parseFloat(price) * (item.quantity || 1)).toString();
+                        const imageUrl = item.image || getProductImageUrl(matchedProduct) || '';
+                        const itemAttrs = getLineItemAttributes(item);
+                        return (
+                          <div key={idx} className="py-3 flex justify-between items-center gap-4">
+                            <div className="flex gap-3 items-center text-right font-sans">
+                              {/* Product Thumbnail */}
+                              <div className="w-14 h-14 rounded-xl bg-slate-50 border border-slate-200/60 overflow-hidden flex-shrink-0 flex items-center justify-center">
+                                {imageUrl ? (
+                                  <img 
+                                    src={imageUrl} 
+                                    alt={name} 
+                                    className="w-full h-full object-cover"
+                                    referrerPolicy="no-referrer"
+                                  />
+                                ) : (
+                                  <Package className="text-slate-300" size={24} />
+                                )}
+                              </div>
+                              
+                              <div>
+                                <p className="font-semibold text-slate-900 text-sm leading-relaxed">{name}</p>
+                                
+                                {/* Selected Product Attributes */}
+                                {itemAttrs && itemAttrs.length > 0 ? (
+                                  <div className="flex flex-wrap gap-1.5 mt-1.5">
+                                    {itemAttrs.map((attr, mIdx) => (
+                                      <span key={mIdx} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-teal-50 text-teal-700 text-[11px] font-medium border border-teal-100/50 font-sans">
+                                        <span className="opacity-85">{attr.key}:</span>
+                                        <strong>{attr.value}</strong>
+                                      </span>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  (item.product_id || item.id) && (
+                                    <p className="text-xs text-slate-400 mt-1">معرّف المنتج: #{item.product_id || item.id}</p>
+                                  )
+                                )}
+                              </div>
+                            </div>
+                            
+                            <div className="text-left font-bold text-slate-800 text-sm shrink-0 font-mono">
+                              <span>{totalLine} SAR</span>
+                              <span className="text-xs text-slate-500 font-normal mr-2 block text-right font-sans">الكمية: {item.quantity || 1}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Financial details summary */}
+                    <div className="border-t border-slate-200 pt-3 mt-2 space-y-2 text-sm">
+                      <div className="flex justify-between items-center">
+                        <span className="text-slate-500">طريقة الدفع:</span>
+                        <span className="font-bold text-slate-800 px-2 py-0.5 bg-slate-200/60 text-slate-800 rounded text-xs">
+                          {selectedOrder.payment_method_title || selectedOrder.payment_method || 'غير محدد'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center text-base pt-2 border-t border-dashed border-slate-200">
+                        <span className="font-bold text-slate-800">المجموع الإجمالي:</span>
+                        <span className="font-black text-[#00b5ad] text-lg">{selectedOrder.total || 0} {selectedOrder.currency || 'SAR'}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Payment attachment (if bank transfer) */}
+                  {selectedOrder.meta_data?.find(m => m.key === '_bank_transfer_proof')?.value && (
+                    <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100 space-y-3 text-right">
+                      <h3 className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
+                        <FileText size={16} className="text-[#00b5ad]" />
+                        <span>إيصال تحويل الحوالة البنكية مسبق الدفع</span>
+                      </h3>
+                      <div className="relative group overflow-hidden rounded-xl border border-slate-200 bg-white max-h-[220px]">
+                        <img 
+                          src={selectedOrder.meta_data.find(m => m.key === '_bank_transfer_proof')?.value} 
+                          alt="إثبات الدفع" 
+                          className="w-full h-auto object-contain max-h-[180px] scale-100 group-hover:scale-105 transition-all cursor-zoom-in"
+                          onClick={() => {
+                            const val = selectedOrder.meta_data?.find(m => m.key === '_bank_transfer_proof')?.value;
+                            if (val) window.open(val, '_blank');
+                          }}
+                          referrerPolicy="no-referrer"
+                        />
+                        <div className="p-2 text-center border-t border-slate-100 bg-slate-50 text-xs font-semibold text-blue-600">
+                          <a 
+                            href={selectedOrder.meta_data.find(m => m.key === '_bank_transfer_proof')?.value} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="hover:underline flex items-center justify-center gap-1"
+                          >
+                            <span>فتح الإيصال في نافذة جديدة</span>
+                            <Eye size={12} />
+                          </a>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Actions Row Inside Modal */}
+                  <div className="bg-blue-50/40 p-4 rounded-xl border border-blue-100 flex flex-col sm:flex-row items-center justify-between gap-3 text-sm text-right">
+                    <span className="font-semibold text-slate-700">تحديث حالة هذا الطلب:</span>
+                    <select 
+                      onChange={(e) => {
+                        handleStatusUpdate(selectedOrder.id, e.target.value);
+                        setSelectedOrder(prev => prev ? { ...prev, status: e.target.value } : null);
+                      }}
+                      value={selectedOrder.status || 'pending'}
+                      className="text-xs border-slate-300 rounded-lg focus:ring-blue-500 py-1.5 px-3 bg-white w-full sm:w-auto font-medium text-right"
+                    >
+                      <option value="pending">قيد الانتظار</option>
+                      <option value="processing">قيد التنفيذ</option>
+                      <option value="completed">مكتمل</option>
+                      <option value="cancelled">ملغي</option>
+                    </select>
+                  </div>
+                </div>
+
+              </div>
+
+              {/* Footer */}
+              <div className="flex justify-end pt-5 mt-6 border-t border-slate-200">
+                <button 
+                  onClick={() => setSelectedOrder(null)}
+                  className="px-6 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition-all text-sm"
+                >
+                  إغلاق النافذة
+                </button>
+              </div>
             </motion.div>
           </div>
         )}

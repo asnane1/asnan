@@ -504,12 +504,32 @@ app.put("/api/shipping-zones/:zoneId/methods/:methodId", async (req, res) => {
 app.post("/api/orders", async (req, res) => {
   try {
     const orderBody = req.body;
-    const orderNumber = Math.floor(Math.random() * 899999) + 100000;
-    const orderId = String(orderNumber);
+    
+    // Fetch all existing orders to determine the next sequential ID
+    const ordersCol = collection(db, "orders");
+    const snapshot = await getDocs(ordersCol);
+    let nextNum = 1001;
+    
+    if (!snapshot.empty) {
+      let maxSeqId = 1000;
+      snapshot.docs.forEach(docSnap => {
+        const d = docSnap.data();
+        const idNum = parseInt(d.id, 10);
+        if (typeof idNum === 'number' && !isNaN(idNum)) {
+          // If the existing ID is less than 100000, treat it as part of our sequence
+          if (idNum < 100000 && idNum > maxSeqId) {
+            maxSeqId = idNum;
+          }
+        }
+      });
+      nextNum = maxSeqId + 1;
+    }
+    
+    const orderId = String(nextNum);
     
     const newOrder = {
       ...orderBody,
-      id: orderNumber,
+      id: nextNum,
       status: req.body.status || "pending",
       currency: orderBody.currency || "SAR",
       date_created: new Date().toISOString(),

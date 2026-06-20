@@ -177,7 +177,11 @@ export default function Checkout({ items, onComplete, onBack }: CheckoutProps) {
         },
         line_items: items.map(item => ({
           product_id: item.product.id,
+          name: item.product.name,
+          price: item.product.price || '0',
+          total: (parseFloat(item.product.price || '0') * item.quantity).toString(),
           quantity: item.quantity,
+          image: item.product.image || '',
           meta_data: item.selectedAttributes ? Object.entries(item.selectedAttributes).map(([key, value]) => ({
             key,
             value
