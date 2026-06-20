@@ -33,8 +33,9 @@ import Favorites from './components/Favorites';
 import Checkout from './components/Checkout';
 import Login from './components/Login';
 import Shop from './components/Shop';
+import MyAccount from './components/MyAccount';
 import { auth, googleProvider, signInWithPopup, signOut, onAuthStateChanged, User, isAdmin, db } from './firebase';
-import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, orderBy, onSnapshot, doc, getDoc, setDoc } from 'firebase/firestore';
 
 interface Banner {
   id: string;
@@ -96,7 +97,7 @@ export default function App() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isAdminView, setIsAdminView] = useState(false);
-  const [currentView, setCurrentView] = useState<'home' | 'shop' | 'cart' | 'favorites' | 'checkout'>('home');
+  const [currentView, setCurrentView] = useState<'home' | 'shop' | 'cart' | 'favorites' | 'checkout' | 'account'>('home');
   const [cart, setCart] = useState<{ product: Product, quantity: number }[]>(() => {
     try {
       const saved = localStorage.getItem('cart');
@@ -156,6 +157,48 @@ export default function App() {
       if (currentUser) {
         const adminStatus = await isAdmin(currentUser.uid);
         setIsUserAdmin(adminStatus);
+        
+        // Auto sync and link user profile details with Firestore users collection
+        try {
+          const userDocRef = doc(db, 'users', currentUser.uid);
+          const userDocSnap = await getDoc(userDocRef);
+          if (!userDocSnap.exists()) {
+            let displayName = currentUser.displayName || '';
+            let phone = '';
+            let address = '';
+            let city = '';
+            
+            // Check if there are previous orders under this user's email to prefill profile info
+            if (currentUser.email) {
+              const ordersRes = await fetch(`/api/orders?email=${encodeURIComponent(currentUser.email.trim().toLowerCase())}`);
+              if (ordersRes.ok) {
+                const ordersData = await ordersRes.json();
+                if (Array.isArray(ordersData) && ordersData.length > 0) {
+                  const orderWithBilling = ordersData.find((o: any) => o.billing && (o.billing.phone || o.billing.address_1));
+                  if (orderWithBilling && orderWithBilling.billing) {
+                    displayName = displayName || `${orderWithBilling.billing.first_name || ''} ${orderWithBilling.billing.last_name || ''}`.trim();
+                    phone = orderWithBilling.billing.phone || '';
+                    address = orderWithBilling.billing.address_1 || '';
+                    city = orderWithBilling.billing.city || '';
+                  }
+                }
+              }
+            }
+            
+            await setDoc(userDocRef, {
+              uid: currentUser.uid,
+              email: currentUser.email,
+              role: currentUser.email === 'noorsori@gmail.com' ? 'admin' : 'customer',
+              displayName: displayName || currentUser.email?.split('@')[0] || 'عميل مسبار',
+              phone,
+              address,
+              city,
+              createdAt: new Date().toISOString()
+            }, { merge: true });
+          }
+        } catch (e) {
+          console.error("Error auto-syncing profile document in Firestore during auth state load:", e);
+        }
       } else {
         setIsUserAdmin(false);
       }
@@ -1023,6 +1066,12 @@ export default function App() {
               >
                 المتجر العام
               </button>
+              <button 
+                onClick={() => setCurrentView('account')}
+                className={`font-medium transition-colors ${currentView === 'account' ? 'text-[#00b5ad]' : 'text-slate-600 hover:text-[#00b5ad]'}`}
+              >
+                حسابي والطلبات
+              </button>
               <a href="#about" className="text-slate-600 hover:text-[#00b5ad] font-medium transition-colors">من نحن</a>
             </div>
 
@@ -1135,6 +1184,15 @@ export default function App() {
                   className={`block w-full text-right px-3 py-2 font-medium ${currentView === 'shop' ? 'text-[#00b5ad]' : 'text-slate-600'}`}
                 >
                   المتجر العام
+                </button>
+                <button 
+                  onClick={() => {
+                    setCurrentView('account');
+                    setIsMenuOpen(false);
+                  }}
+                  className={`block w-full text-right px-3 py-2 font-medium ${currentView === 'account' ? 'text-[#00b5ad]' : 'text-slate-600'}`}
+                >
+                  حسابي والطلبات
                 </button>
                 <a href="#about" className="block px-3 py-2 text-slate-600 font-medium">من نحن</a>
                 
@@ -1685,13 +1743,20 @@ export default function App() {
             }}
             onBack={() => setCurrentView('home')}
           />
-        ) : (
+        ) : currentView === 'checkout' ? (
           <Checkout 
             items={cart} 
+            user={user}
             onComplete={() => {
               setCart([]);
             }}
             onBack={() => setCurrentView('cart')}
+          />
+        ) : (
+          <MyAccount 
+            user={user} 
+            onBack={() => setCurrentView('home')} 
+            onLoginSuccess={() => setCurrentView('account')} 
           />
         )}
       </main>

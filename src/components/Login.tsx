@@ -42,6 +42,9 @@ export default function Login({ isOpen, onClose }: LoginProps) {
       if (err.code === 'auth/email-already-in-use') message = 'البريد الإلكتروني مستخدم بالفعل';
       if (err.code === 'auth/invalid-email') message = 'البريد الإلكتروني غير صالح';
       if (err.code === 'auth/weak-password') message = 'كلمة المرور ضعيفة جداً';
+      if (err.code === 'auth/operation-not-allowed') {
+        message = 'تنبيه لمدير الموقع: خيار تسجيل الدخول بالبريد الإلكتروني وكلمة المرور غير مفعّل في لوحة تحكم Firebase حالياً. لحل هذا، يرجى تشغيل خيار (Email/Password) في إعدادات لوحة تحكم Firebase > Authentication > Build > Sign-in method. حالياً، يرجى تصفح المتجر بالدخول عبر حساب Google بالأسفل حيث أنه مفعّل وسلس!';
+      }
       if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') message = 'البريد الإلكتروني أو كلمة المرور غير صحيحة';
       setError(message);
     } finally {

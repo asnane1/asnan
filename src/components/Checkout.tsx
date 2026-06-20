@@ -2,11 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { ArrowRight, CheckCircle2, CreditCard, MapPin, Phone, User, ShoppingBag, Loader2, Upload, ImageIcon, Package } from 'lucide-react';
 import { Product } from '../types';
+import { db } from '../firebase';
+import { doc, getDoc } from 'firebase/firestore';
 
 interface CheckoutProps {
   items: { product: Product, quantity: number, selectedAttributes?: Record<string, string> }[];
   onComplete: (orderData: any) => void;
   onBack: () => void;
+  user?: any;
 }
 
 interface PaymentGateway {
@@ -26,7 +29,7 @@ interface ShippingMethod {
   enabled: boolean;
 }
 
-export default function Checkout({ items, onComplete, onBack }: CheckoutProps) {
+export default function Checkout({ items, onComplete, onBack, user }: CheckoutProps) {
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -36,6 +39,32 @@ export default function Checkout({ items, onComplete, onBack }: CheckoutProps) {
     city: '',
     notes: ''
   });
+
+  useEffect(() => {
+    if (user) {
+      setFormData(prev => ({
+        ...prev,
+        email: user.email || prev.email,
+        firstName: user.displayName?.split(' ')[0] || prev.firstName,
+        lastName: user.displayName?.split(' ').slice(1).join(' ') || prev.lastName,
+      }));
+      
+      const userRef = doc(db, 'users', user.uid);
+      getDoc(userRef).then((snap) => {
+        if (snap.exists()) {
+          const profile = snap.data();
+          setFormData(prev => ({
+            ...prev,
+            firstName: profile.displayName?.split(' ')[0] || (user.displayName?.split(' ')[0] || prev.firstName),
+            lastName: profile.displayName?.split(' ').slice(1).join(' ') || (user.displayName?.split(' ').slice(1).join(' ') || prev.lastName),
+            phone: profile.phone || prev.phone,
+            address: profile.address || prev.address,
+            city: profile.city || prev.city
+          }));
+        }
+      }).catch(err => console.error("Error reading profile for checkout prefill:", err));
+    }
+  }, [user]);
   const [paymentMethods, setPaymentMethods] = useState<PaymentGateway[]>([]);
   const [selectedPayment, setSelectedPayment] = useState<string>('');
   const [shippingMethods, setShippingMethods] = useState<ShippingMethod[]>([]);

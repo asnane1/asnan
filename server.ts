@@ -228,7 +228,24 @@ app.get("/api/categories", async (req, res) => {
 
 app.get("/api/orders", async (req, res) => {
   try {
+    const { email } = req.query;
     const ordersCol = collection(db, "orders");
+    
+    if (email && typeof email === 'string') {
+      const queryEmail = email.trim().toLowerCase();
+      const snapshot = await getDocs(ordersCol);
+      const ordersList = snapshot.docs
+        .map(docSnap => docSnap.data())
+        .filter((d: any) => d.billing?.email?.trim().toLowerCase() === queryEmail);
+        
+      ordersList.sort((a: any, b: any) => {
+        const d1 = new Date(a.date_created || 0).getTime();
+        const d2 = new Date(b.date_created || 0).getTime();
+        return d2 - d1;
+      });
+      return res.json(ordersList);
+    }
+
     const q = query(ordersCol, orderBy("date_created", "desc"));
     const snapshot = await getDocs(q);
     const ordersList = snapshot.docs.map(docSnap => ({
