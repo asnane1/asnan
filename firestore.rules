@@ -10,7 +10,7 @@ service cloud.firestore {
     // Fields:
     //   - uid: string (required) - Firebase Auth UID
     //   - email: string (required) - User email
-    //   - role: string (required) - 'admin' or 'client'
+    //   - role: string (required) - 'admin' or 'customer'
     //   - displayName: string (optional) - User display name
     //
     // ===============================================================
@@ -28,16 +28,18 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isAuthenticated() && 
-        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
-         (request.auth.token.email == "noorsori@gmail.com" && request.auth.token.email_verified == true));
+      return isAuthenticated() && (
+        request.auth.token.email == "noorsori@gmail.com" ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+      );
     }
 
     function isValidUser(data) {
       return data.keys().hasAll(['uid', 'email', 'role']) &&
              data.uid is string && data.uid.size() > 0 &&
-             data.email is string && data.email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$") &&
-             data.role in ['admin', 'client'];
+             data.email is string && data.email.size() > 0 &&
+             data.role in ['admin', 'customer'];
     }
 
     // ===============================================================
@@ -48,10 +50,10 @@ service cloud.firestore {
       // Users can read their own profile, admins can read any profile
       allow read: if isOwner(userId) || isAdmin();
       
-      // Users can create their own profile as 'client' (unless they are the default admin)
+      // Users can create their own profile as 'customer' (unless they are the default admin)
       // Admins can create any profile
       allow create: if isAuthenticated() && isValidUser(request.resource.data) && (
-        (isOwner(userId) && (request.resource.data.role == 'client' || request.auth.token.email == "noorsori@gmail.com")) || 
+        (isOwner(userId) && (request.resource.data.role == 'customer' || request.auth.token.email == "noorsori@gmail.com")) || 
         isAdmin()
       );
       
