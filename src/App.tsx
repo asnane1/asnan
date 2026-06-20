@@ -1005,7 +1005,7 @@ export default function App() {
                 <div className="w-10 h-10 bg-[#00b5ad]/10 rounded-lg flex items-center justify-center text-[#00b5ad] shadow-sm">
                   <ToothIcon size={32} />
                 </div>
-                <span className="text-xl font-bold text-slate-900 hidden sm:block">اسناني</span>
+                <span className="text-xl font-bold text-slate-900 hidden sm:block">مسبار الاسنان</span>
               </button>
             </div>
 
@@ -1703,9 +1703,9 @@ export default function App() {
               <div className="w-8 h-8 bg-blue-600 rounded flex items-center justify-center text-white">
                 <ToothIcon size={18} />
               </div>
-              <span className="text-lg font-bold text-white">اسناني</span>
+              <span className="text-lg font-bold text-white">مسبار الاسنان</span>
             </div>
-            <p className="text-sm">© {new Date().getFullYear()} جميع الحقوق محفوظة. اسناني.</p>
+            <p className="text-sm">© {new Date().getFullYear()} جميع الحقوق محفوظة. مسبار الاسنان.</p>
             <div className="flex gap-6">
               <button 
                 onClick={() => setIsAdminView(true)}

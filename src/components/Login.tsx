@@ -96,7 +96,7 @@ export default function Login({ isOpen, onClose }: LoginProps) {
                 {isSignUp ? 'إنشاء حساب جديد' : 'تسجيل الدخول'}
               </h2>
               <p className="text-slate-500 mt-2">
-                {isSignUp ? 'انضم إلينا اليوم واستمتع بتجربة تسوق فريدة' : 'مرحباً بك مجدداً في متجر اسناني'}
+                {isSignUp ? 'انضم إلينا اليوم واستمتع بتجربة تسوق فريدة' : 'مرحباً بك مجدداً في متجر مسبار الاسنان'}
               </p>
             </div>
 

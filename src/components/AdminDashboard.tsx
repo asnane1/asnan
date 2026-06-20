@@ -500,7 +500,7 @@ export default function AdminDashboard({ onBack }: { onBack: () => void }) {
                activeTab === 'banners' ? 'إدارة البنرات' : 
                activeTab === 'settings' ? 'الإعدادات العامة' : 'تكامل محركات البحث (Google SEO)'}
             </h1>
-            <p className="text-slate-500">مرحباً بك في لوحة تحكم اسناني</p>
+            <p className="text-slate-500">مرحباً بك في لوحة تحكم مسبار الاسنان</p>
           </div>
 
           {activeTab !== 'orders' && activeTab !== 'settings' && activeTab !== 'google' && (
