@@ -49,7 +49,7 @@ interface Banner {
 
 const ToothIcon = ({ size = 24, className = "" }: { size?: number, className?: string }) => (
   <img 
-    src="https://store.asnanee.com/wp-content/uploads/2026/04/icon.png" 
+    src="/src/assets/images/dental_probe_logo_1782032861941.jpg" 
     alt="Icon" 
     style={{ width: size, height: size }}
     className={`rounded-lg object-contain ${className}`}
