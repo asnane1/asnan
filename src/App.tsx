@@ -36,6 +36,7 @@ import Shop from './components/Shop';
 import MyAccount from './components/MyAccount';
 import { auth, googleProvider, signInWithPopup, signOut, onAuthStateChanged, User, isAdmin, db } from './firebase';
 import { collection, query, where, orderBy, onSnapshot, doc, getDoc, setDoc } from 'firebase/firestore';
+import dentalLogo from './assets/images/dental_probe_logo_1782032861941.jpg';
 
 interface Banner {
   id: string;
@@ -49,7 +50,7 @@ interface Banner {
 
 const ToothIcon = ({ size = 24, className = "" }: { size?: number, className?: string }) => (
   <img 
-    src="/src/assets/images/dental_probe_logo_1782032861941.jpg" 
+    src={dentalLogo} 
     alt="Icon" 
     style={{ width: size, height: size }}
     className={`rounded-lg object-contain ${className}`}
